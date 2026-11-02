@@ -48,7 +48,7 @@ export async function parsePdf(bytes: ArrayBuffer, sourceUrl: string | null): Pr
   if (bytes.byteLength > MAX_PDF_BYTES) throw new Error("PDF exceeds 25 MB limit.");
   const header = new TextDecoder("ascii").decode(bytes.slice(0, 1024));
   if (!header.includes("%PDF-")) throw new Error("This file does not appear to be a PDF.");
-  const loading = getDocument({ data: new Uint8Array(bytes), isEvalSupported: false });
+  const loading = getDocument({ data: new Uint8Array(bytes) });
   const pdf = await loading.promise;
   try {
     let title = "";
