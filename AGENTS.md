@@ -13,6 +13,7 @@ Version v0.1.1 is a **single current-PDF** reading helper with structure-focused
 3. `docs/security.md` — key storage, network, untrusted PDF
 4. `docs/testing.md` — automated/manual acceptance
 5. `docs/roadmap.md` — future-only ideas, not current functionality
+7. `docs/design-system.md` — UI tokens, navigation and interaction contract
 6. `docs/verification.md` — tested status and explicit browser/API test gaps
 
 ## Code map

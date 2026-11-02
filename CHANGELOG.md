@@ -2,6 +2,19 @@
 
 All notable changes are recorded here. Versions follow semantic versioning for MVP milestones.
 
+## [0.1.2] - 2026-11-02
+
+### Changed
+- Rebuilt Side Panel as a minimal light-first reader interface with adaptive dark mode and shared semantic design tokens.
+- Reduced primary navigation from five destinations to **Overview / Ask / Card**; moved explanation starter questions inside Ask.
+- Moved model settings to a header utility action with a clear Back path.
+- Replaced gradient cards and promotional chrome with typographic paper sections, compact controls and contextual empty states.
+- Improved keyboard tab navigation, clear icon names and focus visibility.
+- Added design-system and UI contract documentation and automated structure tests.
+
+### Unchanged
+- Single PDF scope, BYOK provider adapters, PDF parser, claims verification and Markdown export. Real desktop Chrome provider smoke remains required.
+
 ## [0.1.1] - 2026-11-02
 
 ### Added

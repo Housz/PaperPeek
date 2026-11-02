@@ -13,7 +13,16 @@ const byId = <T extends HTMLElement>(id: string): T => {
   if (!element) throw new Error("Missing UI element: " + id);
   return element as T;
 };
+const paperContext = byId("paperContext");
 const paperTitle = byId("paperTitle");
+const primaryTabs = byId("primaryTabs");
+const settingsToggle = byId<HTMLButtonElement>("settingsToggle");
+const settingsBack = byId<HTMLButtonElement>("settingsBack");
+const emptyTitle = byId("emptyTitle");
+const emptyDescription = byId("emptyDescription");
+const emptyAction = byId<HTMLButtonElement>("emptyAction");
+const emptyHint = byId("emptyHint");
+const promptSuggestions = byId("promptSuggestions");
 const paperSubtitle = byId("paperSubtitle");
 const paperState = byId("paperState");
 const status = byId("status");
@@ -40,6 +49,8 @@ let paper: Paper | null = null;
 let digest: Digest | null = null;
 let conversation: ChatMessage[] = [];
 let busy = false;
+let currentView = "overview";
+let lastReadingView = "overview";
 let credentials: Credentials = {
   provider: "gemini", model: DEFAULT_MODELS.gemini, rememberKey: false, apiKey: ""
 };
@@ -52,11 +63,19 @@ function showStatus(message: string, error = false): void {
 function setBusy(value: boolean): void {
   busy = value;
   analyzeBtn.disabled = value;
-  askBtn.disabled = value;
+  askBtn.disabled = value || !paper;
+  askInput.disabled = value || !paper;
   testBtn.disabled = value;
   uploadBtn.disabled = value;
+  emptyAction.disabled = value;
 }
 function setView(view: string): void {
+  currentView = view;
+  const isSettings = view === "settings";
+  if (!isSettings) lastReadingView = view;
+  primaryTabs.hidden = isSettings;
+  paperContext.hidden = isSettings || !(paper || activePdfUrl);
+  settingsToggle.setAttribute("aria-pressed", String(isSettings));
   document.querySelectorAll<HTMLElement>(".view").forEach(el => {
     el.hidden = el.dataset.view !== view;
   });
@@ -64,6 +83,7 @@ function setView(view: string): void {
     const selected = el.dataset.tab === view;
     el.classList.toggle("active", selected);
     el.setAttribute("aria-selected", String(selected));
+    el.tabIndex = selected ? 0 : -1;
   });
 }
 function create<K extends keyof HTMLElementTagNameMap>(tag: K, className = "", text = ""): HTMLElementTagNameMap[K] {
@@ -72,49 +92,78 @@ function create<K extends keyof HTMLElementTagNameMap>(tag: K, className = "", t
   if (text) element.textContent = text;
   return element;
 }
+function renderEmptyState(): void {
+  if (!activePdfUrl && !paper) {
+    emptyTitle.textContent = "从一篇论文开始";
+    emptyDescription.textContent = "打开 arXiv 论文，或选择本地 PDF。快速了解研究问题、方法和重要结果。";
+    emptyAction.textContent = "选择 PDF";
+    emptyAction.dataset.action = "upload";
+    emptyAction.hidden = false;
+    emptyHint.textContent = "一次只分析当前论文，不建立文献库。";
+  } else if (!credentials.apiKey.trim()) {
+    emptyTitle.textContent = "先连接你的模型";
+    emptyDescription.textContent = "论文已就绪。添加自己的 API Key 后，即可生成概览和提问。";
+    emptyAction.textContent = "配置 API Key";
+    emptyAction.dataset.action = "settings";
+    emptyAction.hidden = false;
+    emptyHint.textContent = "仅在你开始分析或提问后，正文才会发送到模型服务商。";
+  } else {
+    emptyTitle.textContent = "论文已就绪";
+    emptyDescription.textContent = "点击上方「分析论文」，获取研究问题、核心方法与关键证据。";
+    emptyAction.hidden = true;
+    emptyHint.textContent = "概览生成后可直接导出为 Markdown。";
+  }
+}
 function renderPaperState(): void {
-  paperTitle.textContent = paper?.title ||
-    (activePdfUrl ? "已识别 PDF · 点击分析" : "打开一篇 arXiv PDF，开始阅读");
+  paperContext.hidden = currentView === "settings" || !(paper || activePdfUrl);
+  paperTitle.textContent = paper?.title || (activePdfUrl ? "当前 PDF" : "尚未打开论文");
   paperSubtitle.textContent = paper
-    ? paper.totalPages + " 页 · " + (paper.sourceUrl || "本地文件") +
-      (paper.truncated ? " · 文本过长，分析内容已截断" : "")
-    : activePdfUrl || "支持公开 PDF 链接或手动选择本地文件";
-  paperState.textContent = paper ? (digest ? "Analyzed" : "Loaded") : (activePdfUrl ? "Ready" : "Not loaded");
-  analyzeBtn.textContent = digest ? "↻ 重新分析" : (paper ? "✦ 生成概览" : "✦ 分析当前论文");
+    ? paper.totalPages + " 页 · " + (paper.sourceUrl ? "在线 PDF" : "本地 PDF") +
+      (paper.truncated ? " · 正文已截断" : "")
+    : activePdfUrl ? activePdfUrl : "";
+  paperState.textContent = digest ? "已分析" : paper ? "已读取" : "待分析";
+  analyzeBtn.textContent = !credentials.apiKey.trim()
+    ? "配置模型" : digest ? "重新分析" : "分析论文";
+  askBtn.disabled = busy || !paper;
+  askInput.disabled = busy || !paper;
+  byId<HTMLButtonElement>("copyBtn").disabled = !cardText.value;
+  byId<HTMLButtonElement>("downloadBtn").disabled = !cardText.value;
+  renderEmptyState();
 }
 function resetPaper(): void {
   paper = null; digest = null; conversation = []; cardText.value = "";
   overviewContent.replaceChildren(); renderOverview(); renderChat(); renderPaperState();
 }
-function makeCard(title: string, text: string | string[]): HTMLElement {
-  const card = create("article", "digest-card");
-  card.append(create("h3", "", title));
-  if (typeof text === "string") card.append(create("p", "", text || "论文未提供足够信息。"));
+function makeCard(title: string, text: string | string[], lead = false): HTMLElement {
+  const section = create("section", lead ? "digest-section lead" : "digest-section");
+  section.append(create("h3", "", title));
+  if (typeof text === "string") section.append(create("p", "", text || "论文未提供足够信息。"));
   else {
     const list = create("ul");
     for (const item of text) list.append(create("li", "", item));
-    card.append(list);
+    section.append(list);
   }
-  return card;
+  return section;
 }
 function renderOverview(): void {
   const exists = !!digest && !!paper;
   overviewEmpty.hidden = exists;
   overviewContent.hidden = !exists;
+  renderEmptyState();
   overviewContent.replaceChildren();
   if (!digest || !paper) return;
-  overviewContent.append(makeCard("一句话概括", digest.tldr),
+  overviewContent.append(makeCard("这篇论文做了什么", digest.tldr, true),
     makeCard("研究问题", digest.problem),
     makeCard("核心方法", digest.approach));
-  const findingsCard = create("article", "digest-card");
-  findingsCard.append(create("h3", "", "关键发现与证据"));
+  const findingsCard = create("section", "digest-section");
+  findingsCard.append(create("h3", "", "关键结果"));
   const list = create("ul");
   for (const finding of digest.findings) {
     const item = create("li");
     item.append(create("span", "", finding.text));
     if (finding.verified && finding.page) {
       const page = finding.page;
-      const badge = create("button", "page-link", "✓ PDF p." + page + " · 查看原文");
+      const badge = create("button", "page-link", "PDF p." + page + " ↗");
       badge.type = "button";
       badge.addEventListener("click", () => void navigateToPage(page));
       item.append(badge);
@@ -130,8 +179,10 @@ function renderOverview(): void {
 }
 function renderChat(): void {
   chatHistory.replaceChildren();
+  promptSuggestions.hidden = !!conversation.length || !paper;
   if (!conversation.length) {
-    chatHistory.append(create("div", "chat-empty", "试着问：这篇论文的核心假设是什么？"));
+    chatHistory.append(create("div", "chat-empty", paper
+      ? "针对方法、实验或某个难懂的概念继续提问。" : "先分析当前论文，再提问。"));
     return;
   }
   for (const message of conversation) {
@@ -173,6 +224,7 @@ async function refreshActiveTab(): Promise<void> {
   const url = candidatePdfUrl(tab?.url);
   if (tab?.id !== activeTabId || url !== activePdfUrl) {
     activeTabId = tab?.id; activePdfUrl = url;
+    showStatus("");
     if (paper) resetPaper();
   }
   renderPaperState();
@@ -206,6 +258,11 @@ async function summarize(): Promise<void> {
 }
 async function analyzeCurrent(): Promise<void> {
   if (busy) return;
+  if (!credentials.apiKey.trim()) {
+    setView("settings");
+    showStatus("先配置 API Key，再分析论文。");
+    return;
+  }
   if (paper) { await summarize(); return; }
   if (!activePdfUrl) {
     showStatus("未识别到 PDF。请打开 arXiv PDF 链接或选择本地 PDF。", true); return;
@@ -297,6 +354,23 @@ async function acceptSelection(): Promise<void> {
 }
 document.querySelectorAll<HTMLButtonElement>(".tab").forEach(tab => {
   tab.addEventListener("click", () => setView(tab.dataset.tab || "overview"));
+  tab.addEventListener("keydown", event => {
+    const tabs = [...document.querySelectorAll<HTMLButtonElement>(".tab")];
+    const index = tabs.indexOf(tab);
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const next = tabs[(index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
+    setView(next.dataset.tab || "overview");
+    next.focus();
+  });
+});
+settingsToggle.addEventListener("click", () => {
+  setView(currentView === "settings" ? lastReadingView : "settings");
+});
+settingsBack.addEventListener("click", () => setView(lastReadingView));
+emptyAction.addEventListener("click", () => {
+  if (emptyAction.dataset.action === "settings") setView("settings");
+  else fileInput.click();
 });
 analyzeBtn.addEventListener("click", () => void analyzeCurrent());
 uploadBtn.addEventListener("click", () => fileInput.click());
@@ -333,7 +407,11 @@ settingsForm.addEventListener("submit", event => {
   event.preventDefault();
   const next = formCredentials();
   void saveCredentials(next).then(() => {
-    credentials = next; showStatus("设置已保存在本机。现在可以分析论文。");
+    credentials = next;
+    renderPaperState();
+    renderOverview();
+    setView(lastReadingView);
+    showStatus("模型设置已保存。");
   }).catch(() => showStatus("无法保存设置。", true));
 });
 testBtn.addEventListener("click", () => {
@@ -378,5 +456,6 @@ async function init(): Promise<void> {
   }
   renderOverview();
   renderChat();
+  setView("overview");
 }
 void init();
