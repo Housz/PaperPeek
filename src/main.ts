@@ -126,6 +126,8 @@ function renderPaperState(): void {
     ? "配置模型" : digest ? "重新分析" : "分析论文";
   askBtn.disabled = busy || !paper;
   askInput.disabled = busy || !paper;
+  byId<HTMLButtonElement>("copyBtn").disabled = !cardText.value;
+  byId<HTMLButtonElement>("downloadBtn").disabled = !cardText.value;
   renderEmptyState();
 }
 function resetPaper(): void {
