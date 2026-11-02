@@ -1,0 +1,41 @@
+name: Extension CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: |
+          npm install --no-audit --no-fund --legacy-peer-deps || {
+            echo 'npm dependency setup failed — debug excerpt:'
+            find "$HOME/.npm/_logs" -name '*debug*.log' -exec tail -n 60 {} \;
+            exit 1
+          }
+      - name: Typecheck
+        run: npm run check
+      - name: Unit tests
+        run: npm test
+      - name: Build unpacked Chrome extension
+        run: npm run build
+      - name: Check packaged manifest and service worker
+        run: |
+          test -s dist/manifest.json
+          test -s dist/sidepanel.html
+          test -s dist/assets/background.js
+      - name: Upload unpacked extension
+        uses: actions/upload-artifact@v4
+        with:
+          name: paperpeek-v0.1.1-unpacked
+          path: dist/
+          if-no-files-found: error
