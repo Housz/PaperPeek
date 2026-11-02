@@ -3,95 +3,121 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
   <title>PaperPeek</title>
   <link rel="stylesheet" href="/src/styles.css" />
 </head>
 <body>
   <div class="app">
     <header class="topbar">
-      <div class="brand">
-        <div class="brandmark" aria-hidden="true"><span>p</span><i>●</i></div>
-        <div><h1>PaperPeek</h1><p>Research, made readable.</p></div>
+      <div class="brand" aria-label="PaperPeek">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4"/><path d="M9 12h6M9 16h4"/></svg>
+        </span>
+        <span class="brand-name">PaperPeek</span>
       </div>
-      <span class="version">v0.1.1</span>
+      <button id="settingsToggle" type="button" class="icon-button" aria-label="模型设置" title="模型设置">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z"/><path d="M19.4 15.2l1-1.7-1.5-2.6-2 .1a6.8 6.8 0 0 0-1.4-.8l-.9-1.8h-3l-.9 1.8c-.5.2-1 .5-1.4.8l-2-.1-1.5 2.6 1 1.7v1.6l-1 1.7 1.5 2.6 2-.1c.4.3.9.6 1.4.8l.9 1.8h3l.9-1.8c.5-.2 1-.5 1.4-.8l2 .1 1.5-2.6-1-1.7z" transform="translate(-1 -3) scale(.96)"/></svg>
+      </button>
     </header>
-    <main>
-      <section class="paper-surface" aria-label="当前文档">
-        <div class="paper-topline"><span class="eyebrow">CURRENT PAPER</span><span id="paperState" class="paper-state">Not loaded</span></div>
-        <div class="paper-title" id="paperTitle">打开一篇 arXiv PDF，开始阅读</div>
-        <div class="paper-subtitle" id="paperSubtitle">支持公开 PDF 链接或手动选择本地文件</div>
+
+    <main class="workspace">
+      <section id="paperContext" class="paper-context" aria-label="当前论文" hidden>
+        <div class="paper-topline">
+          <span class="micro-label">当前论文</span>
+          <span id="paperState" class="paper-state">待分析</span>
+        </div>
+        <h1 id="paperTitle" class="paper-title">当前 PDF</h1>
+        <p id="paperSubtitle" class="paper-subtitle"></p>
         <div class="paper-actions">
-          <button id="analyzeBtn" class="btn btn-primary" type="button">✦ 分析当前论文</button>
-          <button id="uploadBtn" class="btn btn-secondary" type="button">打开 PDF</button>
-          <input id="fileInput" type="file" accept="application/pdf,.pdf" hidden />
+          <button id="analyzeBtn" type="button" class="button button-primary">分析论文</button>
+          <button id="uploadBtn" type="button" class="button button-ghost">更换文件</button>
         </div>
       </section>
+      <input id="fileInput" type="file" accept="application/pdf,.pdf" hidden />
 
-      <div id="status" role="status" aria-live="polite" class="status" hidden></div>
+      <div id="status" class="status" role="status" aria-live="polite" hidden></div>
 
-      <nav class="tabbar" aria-label="功能导航">
-        <button class="tab active" type="button" data-tab="overview" aria-selected="true">概览</button>
-        <button class="tab" type="button" data-tab="explain" aria-selected="false">讲解</button>
-        <button class="tab" type="button" data-tab="ask" aria-selected="false">提问</button>
-        <button class="tab" type="button" data-tab="card" aria-selected="false">卡片</button>
-        <button class="tab icon-tab" type="button" data-tab="settings" aria-label="模型设置" title="模型设置">⚙</button>
+      <nav id="primaryTabs" class="tabbar" role="tablist" aria-label="阅读内容">
+        <button id="tab-overview" role="tab" aria-controls="view-overview" class="tab active" data-tab="overview" type="button" aria-selected="true">概览</button>
+        <button id="tab-ask" role="tab" aria-controls="view-ask" class="tab" data-tab="ask" type="button" aria-selected="false">提问</button>
+        <button id="tab-card" role="tab" aria-controls="view-card" class="tab" data-tab="card" type="button" aria-selected="false">卡片</button>
       </nav>
 
-      <section class="view" data-view="overview">
+      <section id="view-overview" class="view" data-view="overview" role="tabpanel" aria-labelledby="tab-overview">
         <div id="overviewEmpty" class="empty">
-          <div class="empty-icon">◈</div>
-          <h2>先看重点，再决定是否精读</h2>
-          <p>PaperPeek 会提炼研究问题、技术方法、重要发现和局限，并校验能够确认的原文证据。</p>
-          <div class="empty-tip">第一步 · 选择 AI 提供商，配置自己的 API Key</div>
+          <div class="empty-symbol" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6h17l7 7v29H12z"/><path d="M29 6v7h7"/><path d="M18 21h12M18 27h12M18 33h8"/></svg>
+          </div>
+          <h2 id="emptyTitle">从一篇论文开始</h2>
+          <p id="emptyDescription">打开 arXiv 论文，或选择本地 PDF。我们会帮你提炼研究问题、方法与关键结论。</p>
+          <button id="emptyAction" type="button" class="button button-primary">选择 PDF</button>
+          <p class="empty-hint" id="emptyHint">一次只分析当前论文，不建立文献库。</p>
         </div>
-        <div id="overviewContent" hidden></div>
+        <div id="overviewContent" class="overview-content" hidden></div>
       </section>
 
-      <section class="view" data-view="explain" hidden>
-        <div class="section-heading">
-          <h2>理解这篇论文</h2>
-          <p>选择阅读任务，问题将发送到当前论文的 AI 问答中。</p>
-        </div>
-        <div class="prompt-grid">
-          <button type="button" data-prompt="请用直观语言解释论文的核心方法，并说明它为什么这样设计。">◎ <strong>直观理解</strong><small>用简单语言解释方法</small></button>
-          <button type="button" data-prompt="请按输入、关键模块、处理步骤和输出，逐步讲解论文的方法。">⇥ <strong>方法流程</strong><small>逐步拆解技术路线</small></button>
-          <button type="button" data-prompt="请分析论文的实验设计、基线方法、主要结果，以及有哪些结论无法从实验直接推出。">▤ <strong>实验与证据</strong><small>检视结论的支持程度</small></button>
-          <button type="button" data-prompt="请解释论文最重要的数学公式、符号、假设和它们在方法中的作用；若提取文本不包含公式，明确指出需要截图。">∑ <strong>关键公式</strong><small>符号、假设与直觉</small></button>
-        </div>
-        <p class="fine-print">v0.1.1 基于可提取文本讲解；直接框选公式或图表将在增强阅读器版本支持。</p>
-      </section>
-
-      <section class="view" data-view="ask" hidden>
-        <div class="section-heading">
-          <h2>询问当前论文</h2>
-          <p>回答会利用 PDF 正文与最近对话。页码提示由模型建议，重要结论请核对原文。</p>
-        </div>
+      <section id="view-ask" class="view view-ask" data-view="ask" role="tabpanel" aria-labelledby="tab-ask" hidden>
         <div id="chatHistory" class="chat-history" aria-live="polite"></div>
+        <div id="promptSuggestions" class="prompt-suggestions" aria-label="常用提问">
+          <p class="micro-label">试试这些问题</p>
+          <button type="button" class="prompt-row" data-prompt="请用直观语言解释论文的核心方法，并说明它为什么这样设计。">
+            <span>核心方法是怎么工作的？</span><span aria-hidden="true">↗</span>
+          </button>
+          <button type="button" class="prompt-row" data-prompt="请按输入、关键模块、处理步骤和输出，逐步讲解论文的方法。">
+            <span>逐步拆解技术流程</span><span aria-hidden="true">↗</span>
+          </button>
+          <button type="button" class="prompt-row" data-prompt="请分析论文的实验设计、基线方法、主要结果，以及有哪些结论无法从实验直接推出。">
+            <span>实验支持了哪些结论？</span><span aria-hidden="true">↗</span>
+          </button>
+          <button type="button" class="prompt-row" data-prompt="请解释论文最重要的数学公式、符号、假设和它们在方法中的作用；若提取文本不包含公式，明确指出需要截图。">
+            <span>解释关键公式与符号</span><span aria-hidden="true">↗</span>
+          </button>
+        </div>
         <form id="askForm" class="ask-form">
-          <label for="askInput" class="sr-only">向论文提问</label>
-          <textarea id="askInput" rows="4" maxlength="3000" placeholder="例如：作者的方法相对于基线有什么关键不同？"></textarea>
-          <div class="form-bottom"><span>Ctrl / ⌘ + Enter 发送</span><button id="askBtn" type="submit" class="btn btn-primary">提问 ↗</button></div>
+          <label for="askInput" class="sr-only">向当前论文提问</label>
+          <textarea id="askInput" rows="2" maxlength="3000" placeholder="向这篇论文提问…"></textarea>
+          <div class="form-bottom">
+            <span id="composerHint">基于当前论文 · Ctrl/⌘ + Enter</span>
+            <button id="askBtn" class="send-button" type="submit" aria-label="发送问题" title="发送问题">
+              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16M14 6l6 6-6 6"/></svg>
+            </button>
+          </div>
         </form>
+        <p class="helper-text">回答可能存在偏差；页码提示需回到原文核查。</p>
       </section>
 
-      <section class="view" data-view="card" hidden>
-        <div class="section-heading">
-          <h2>Paper Card <span class="muted">.md</span></h2>
-          <p>用于快速回顾或提供给其他 AI 的精简论文上下文。不保存完整聊天记录。</p>
+      <section id="view-card" class="view" data-view="card" role="tabpanel" aria-labelledby="tab-card" hidden>
+        <div class="view-heading">
+          <h2>阅读卡片</h2>
+          <p>浓缩论文要点，可复制到 Obsidian 或交给其他 AI 快速回顾。</p>
         </div>
-        <label for="cardText" class="sr-only">Markdown 论文卡片</label>
-        <textarea id="cardText" class="card-text" readonly placeholder="分析论文后自动生成 Markdown 卡片。"></textarea>
         <div class="card-actions">
-          <button class="btn btn-primary" type="button" id="copyBtn">复制 Markdown</button>
-          <button class="btn btn-secondary" type="button" id="downloadBtn">下载 .md</button>
+          <button id="copyBtn" type="button" class="button button-secondary">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>
+            复制
+          </button>
+          <button id="downloadBtn" type="button" class="button button-ghost">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m-5-5 5 5 5-5M5 17v3h14v-3"/></svg>
+            保存 .md
+          </button>
         </div>
-        <p class="fine-print">摘要是阅读索引而不是原文替代品。已核实的引用标注 PDF 页码。</p>
+        <label class="sr-only" for="cardText">Markdown 论文卡片</label>
+        <textarea id="cardText" class="card-text" readonly placeholder="完成论文分析后，这里会生成可复用的 Markdown 卡片。"></textarea>
+        <p class="helper-text">摘要只保留核心信息，不替代论文原文。</p>
       </section>
 
-      <section class="view" data-view="settings" hidden>
-        <div class="section-heading"><h2>AI 设置</h2><p>使用自己的模型 API Key；无需账户或 PaperPeek 后端。</p></div>
+      <section id="view-settings" class="view view-settings" data-view="settings" aria-labelledby="settingsTitle" hidden>
+        <button id="settingsBack" type="button" class="back-link">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12H4m6-6-6 6 6 6"/></svg>
+          返回阅读
+        </button>
+        <div class="view-heading">
+          <h2 id="settingsTitle">模型设置</h2>
+          <p>选择模型并使用自己的 API Key。PaperPeek 不需要账号或后端。</p>
+        </div>
         <form id="settingsForm" class="settings-form">
-          <label for="providerInput">服务提供商</label>
+          <label for="providerInput">服务商</label>
           <select id="providerInput">
             <option value="gemini">Google Gemini</option>
             <option value="openai">OpenAI</option>
@@ -100,17 +126,20 @@
           <label for="modelInput">模型 ID</label>
           <input id="modelInput" type="text" required spellcheck="false" autocomplete="off" />
           <label for="keyInput">API Key</label>
-          <input id="keyInput" type="password" required spellcheck="false" autocomplete="off" placeholder="仅在本机保存（默认会话内）" />
-          <label class="checkbox-line"><input id="rememberInput" type="checkbox" /> <span>在本机持久保存密钥（存在泄露风险）</span></label>
+          <input id="keyInput" type="password" required spellcheck="false" autocomplete="off" placeholder="输入 API Key" />
+          <label class="checkbox-line"><input id="rememberInput" type="checkbox" /> <span>在本机保留 API Key</span></label>
+          <p class="field-note">默认仅当前浏览器会话有效。持久保存存在凭证泄露风险。</p>
           <div class="form-actions">
-            <button id="saveBtn" class="btn btn-primary" type="submit">保存设置</button>
-            <button id="testBtn" class="btn btn-secondary" type="button">测试连接</button>
+            <button id="saveBtn" type="submit" class="button button-primary">保存设置</button>
+            <button id="testBtn" type="button" class="button button-secondary">测试连接</button>
           </div>
         </form>
-        <div class="privacy-note"><strong>隐私提示</strong><p>分析与提问会将论文文本发送给你选择的模型供应商。PaperPeek 无自己的服务器；扩展存储并非密钥保险箱。请使用受限密钥并检查服务商的数据政策。</p></div>
+        <details class="privacy-details">
+          <summary>隐私与数据处理</summary>
+          <p>分析或提问时，论文文字会发送给你选择的模型服务商。PaperPeek 不运营后端，也不自动创建知识库。API Key 保存在本地扩展存储中，并非加密保险箱；建议使用可限制额度的独立密钥。</p>
+        </details>
       </section>
     </main>
-    <footer class="footer"><span>One paper at a time.</span><a href="https://github.com/Housz/PaperPeek" target="_blank" rel="noopener noreferrer">GitHub ↗</a></footer>
   </div>
   <script type="module" src="/src/main.ts"></script>
 </body>
