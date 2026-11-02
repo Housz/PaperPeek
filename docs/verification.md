@@ -43,3 +43,12 @@ Follow [testing.md](testing.md), especially M01–M15, on desktop Chrome. Use an
 ## Interpretation
 
 **CI green ≠ production-ready.** The code and bundle are available to install experimentally. Report the runtime and provider smoke as pending until a desktop Chrome session verifies the full flow.
+
+
+## v0.1.2 UI refresh verification — 2026-11-02
+
+- GitHub Actions [run 41385847837](https://github.com/Housz/PaperPeek/actions/runs/41385847837): dependency installation, strict TypeScript, **20/20 Vitest checks (6 test files)**, Vite build and packaged extension checks passed. Build artifact: \`paperpeek-v0.1.2-unpacked\`.
+- \`tests/ui.test.ts\` guards the three reading tabs, settings escape, unique UI IDs, explanatory question entries, focus-related markup and **WCAG 4.5:1 minimum contrast** for light theme's small-text/action tokens against white.
+- Visual layout was inspected in an isolated headless Chromium using the **actual Vite-produced sidepanel HTML/CSS** plus representative *static* mock paper/response content. Widths: **300px, 360px, 450px**. No horizontal overflow observed; inspected Overview, Ask, Card, Settings and a dark-mode empty state.
+- This visual check was not a real extension API / PDF / LLM end-to-end test: local navigation was blocked by sandbox policy, so snapshots used \`page.set_content\` rather than the actual extension runtime. Real Side Panel accessibility and runtime behavior in desktop Chrome remain manual release criteria.
+- Fixed a contrast issue discovered during review: small muted text token \`--faint\` was changed from \`#859099\` to \`#6a7680\` to meet >=4.5:1 on white. Disabled Copy/Save before card generation.
