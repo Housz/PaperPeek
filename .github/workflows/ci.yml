@@ -16,7 +16,12 @@ jobs:
         with:
           node-version: '22'
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: |
+          npm install --no-audit --no-fund --legacy-peer-deps || {
+            echo 'npm dependency setup failed — debug excerpt:'
+            find "$HOME/.npm/_logs" -name '*debug*.log' -exec tail -n 60 {} \;
+            exit 1
+          }
       - name: Typecheck
         run: npm run check
       - name: Unit tests
