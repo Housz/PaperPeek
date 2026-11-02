@@ -51,6 +51,7 @@ npm run build
 | [使用指南](docs/user-guide.md) | 安装、操作、排障 |
 | [开发规范](docs/development.md) | 工程结构、约定、测试与交付流程 |
 | [测试计划](docs/testing.md) | 自动化与手动验证矩阵 |
+| [验证报告](docs/verification.md) | CI 结果、未覆盖的真实浏览器与 API 测试 |
 | [安全与隐私](docs/security.md) | API Key、权限、PDF 和提示注入风险 |
 | [路线图](docs/roadmap.md) | 版本边界、待验证能力 |
 | [架构决策 ADR](docs/decisions/0001-extension-byok.md) | 为何先选择 Side Panel + BYOK |
