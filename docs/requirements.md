@@ -1,4 +1,4 @@
-# Requirements / PRD — PaperPeek v0.1.1
+# Requirements / PRD — PaperPeek v0.1.2
 
 **Status:** accepted initial scope. **Owner:** repository maintainer. **Last updated:** 2026-11-02. Change with a PR when behavior changes.
 
@@ -27,7 +27,7 @@ PaperPeek helps a scientist decide **whether to read** the PDF, understand resea
 - **P0 BYOK:** A new user selects provider, model ID and key and tests the connection. No key is present in source or CI. Default key persistence is session-only; opt-in local persistence is plainly disclosed.
 - **P0 Overview:** After analysis, show TL;DR, research question, method, findings, limitations and keywords in concise Chinese. Separate author claims from verified findings in prompt; never give unsupported numeric paper scores.
 - **P0 Source:** A finding's clickable verified citation only exists if the quoted snippet matches the claimed PDF page. Otherwise visibly label source position unverified. PDF navigation is page-level in Chrome's native viewer.
-- **P0 Ask/Explain:** User can ask a free-form question, see answer and retain recent conversational context. The answer should state uncertainty when source is insufficient. Preset prompts are quick entry points. Chat page labels are navigational *hints*, not verified evidence.
+- **P0 Ask:** User can ask a free-form question, see answer and retain recent conversational context. The answer should state uncertainty when source is insufficient. Preset prompts are lightweight quick rows in Ask (not a separate Explain tab). Chat page labels are navigational *hints*, not verified evidence.
 - **P0 Markdown:** Overview yields deterministic Markdown with title, author if available, URL, TL;DR, problem, approach, findings, limitations and keywords. Support copy and UTF-8 download. Do NOT dump transcript into the card.
 - **P1 selection:** Context menu may relay selected text to Ask if supported by the current PDF viewer; lack of selection support must not break the main workflow.
 - **State isolation:** Switching active tab resets current paper memory and does not leak previous paper into new requests. No long-term document database.
