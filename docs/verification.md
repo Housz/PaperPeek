@@ -1,4 +1,4 @@
-# Verification report — PaperPeek v0.1.1
+# Verification report — PaperPeek v0.1.2
 
 **Date:** 2026-11-02  
 **Status:** automated checks successful; real browser end-to-end and live provider call **not yet verified**.
@@ -20,6 +20,10 @@ Automated unit coverage:
 
 The build output includes a bundled PDF.js worker (`assets/pdf.worker...`), sidepanel resources, Manifest V3 and a service worker. No real API Key was used by CI.
 
+## UI refresh validation
+
+The UI structure now has `tests/ui.test.ts` for navigation, unique IDs, accessible control labels and semantic tokens. Visual inspection in Chromium is a supplement, not proof of real Chrome extension compatibility.
+
 ## Not verified yet — important
 
 - A fully functional Chrome extension session in an actual unrestricted desktop Chrome environment.
@@ -34,7 +38,7 @@ Browser-based testing in the execution environment was blocked by sandbox/browse
 
 ## Manual acceptance checklist for release owner
 
-Follow [testing.md](testing.md), especially M01–M15, on desktop Chrome. Use an **independently created, rate-limited API key** entered only in extension settings. Do not publish test keys, prompts containing confidential research, or error logs with credentials. Log actual Chrome version, PDF source and model identifier. Update this document with observed passes/failures before tagging or publishing v0.1.1.
+Follow [testing.md](testing.md), especially M01–M15, on desktop Chrome. Use an **independently created, rate-limited API key** entered only in extension settings. Do not publish test keys, prompts containing confidential research, or error logs with credentials. Log actual Chrome version, PDF source and model identifier. Update this document with observed passes/failures before tagging or publishing v0.1.2.
 
 ## Interpretation
 
