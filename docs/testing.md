@@ -1,4 +1,4 @@
-# Test plan — v0.1.1
+# Test plan — v0.1.2
 
 **Test strategy:** deterministic unit tests in CI + real Chrome/PDF/provider manual smoke. Do not infer successful production behavior from mocked tests.
 
@@ -11,6 +11,10 @@
 - prompt context contains page markers; truncated PDF warning
 
 CI runs TypeScript check, unit tests and bundle build; publishes `dist` artifact.
+
+## UI acceptance (v0.1.2)
+
+Check at 300 / 360 / 450px sidebar width, light and OS-dark modes: source strip is compact and hidden when no PDF or while Settings is open; only Overview / Ask / Card are main tabs; explanation quick questions live in Ask; Settings back restores last reading tab; empty-state actions reflect PDF+BYOK readiness; keyboard arrow keys navigate tabs; paper text, page links, chat and Markdown do not clip horizontally.
 
 ## Manual real-browser matrix
 
