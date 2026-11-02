@@ -186,17 +186,22 @@ function currentRequest(prompt: string, json = false) {
 }
 async function summarize(): Promise<void> {
   if (!paper || busy) return;
+  const targetPaper = paper;
   setBusy(true); showStatus("正在整理研究问题、方法与证据……");
   try {
-    const raw = await generateText(currentRequest(overviewPrompt(paper), true));
-    digest = parseDigest(raw, paper.pages);
-    cardText.value = toMarkdown(paper, digest);
+    const raw = await generateText(currentRequest(overviewPrompt(targetPaper), true));
+    // The tab may change while the provider request is in flight.
+    if (paper !== targetPaper) return;
+    const nextDigest = parseDigest(raw, targetPaper.pages);
+    digest = nextDigest;
+    cardText.value = toMarkdown(targetPaper, nextDigest);
     renderOverview(); renderPaperState(); setView("overview");
-    showStatus(digest.findings.some(f => !f.verified)
+    showStatus(nextDigest.findings.some(f => !f.verified)
       ? "分析完成。部分结论没有可验证的原文片段，请人工核查。"
       : "论文分析完成。");
   } catch (error) {
-    showStatus(error instanceof Error ? error.message : "分析失败，请重试。", true);
+    if (paper === targetPaper)
+      showStatus(error instanceof Error ? error.message : "分析失败，请重试。", true);
   } finally { setBusy(false); }
 }
 async function analyzeCurrent(): Promise<void> {
@@ -206,6 +211,7 @@ async function analyzeCurrent(): Promise<void> {
     showStatus("未识别到 PDF。请打开 arXiv PDF 链接或选择本地 PDF。", true); return;
   }
   const url = activePdfUrl;
+  const tabId = activeTabId;
   try {
     if (!isArxivUrl(url)) {
       const origin = permissionOrigin(url);
@@ -216,7 +222,8 @@ async function analyzeCurrent(): Promise<void> {
     const bytes = await fetchPdf(url);
     const loaded = await parsePdf(bytes, url);
     // Reject a stale load after switching browser tabs.
-    if (url !== activePdfUrl) throw new Error("标签页已切换，请重新分析当前论文。");
+    if (url !== activePdfUrl || tabId !== activeTabId)
+      throw new Error("标签页已切换，请重新分析当前论文。");
     paper = loaded; digest = null; conversation = [];
     renderOverview(); renderChat(); renderPaperState();
   } catch (error) {
@@ -227,30 +234,38 @@ async function analyzeCurrent(): Promise<void> {
 }
 async function openLocal(file: File): Promise<void> {
   if (busy) return;
+  const tabId = activeTabId;
   setBusy(true); showStatus("正在读取本地 PDF……");
   try {
-    paper = await parsePdf(await file.arrayBuffer(), null);
-    if (!paper.title || paper.title === "Untitled paper") paper.title = file.name.replace(/\.pdf$/i, "");
+    const loaded = await parsePdf(await file.arrayBuffer(), null);
+    if (tabId !== activeTabId) return;
+    if (!loaded.title || loaded.title === "Untitled paper")
+      loaded.title = file.name.replace(/\.pdf$/i, "");
+    paper = loaded;
     digest = null; conversation = [];
     renderOverview(); renderChat(); renderPaperState();
     showStatus("PDF 已加载。正在准备生成概览……");
   } catch (error) {
-    showStatus(error instanceof Error ? error.message : "本地 PDF 加载失败。", true);
+    if (tabId === activeTabId)
+      showStatus(error instanceof Error ? error.message : "本地 PDF 加载失败。", true);
     return;
   } finally { setBusy(false); }
   await summarize();
 }
 async function ask(question: string): Promise<void> {
   if (!paper || busy) { showStatus("请先分析或加载当前论文。", true); return; }
+  const targetPaper = paper;
   const history = conversation.slice(-6);
   conversation.push({ role: "user", text: question });
   renderChat(); setView("ask"); setBusy(true); showStatus("正在基于当前论文回答……");
   try {
-    const answer = await generateText(currentRequest(askPrompt(paper, question, history)));
+    const answer = await generateText(currentRequest(askPrompt(targetPaper, question, history)));
+    if (paper !== targetPaper) return; // Never show a former paper's answer in another tab.
     conversation.push({ role: "assistant", text: answer });
     renderChat(); showStatus("");
   } catch (error) {
-    showStatus(error instanceof Error ? error.message : "提问失败。", true);
+    if (paper === targetPaper)
+      showStatus(error instanceof Error ? error.message : "提问失败。", true);
   } finally { setBusy(false); }
 }
 function formCredentials(): Credentials {
