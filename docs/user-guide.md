@@ -1,4 +1,4 @@
-# User guide — PaperPeek v0.1.1
+# User guide — PaperPeek v0.1.2
 
 ## Requirements / setup
 
@@ -15,7 +15,7 @@ At `chrome://extensions`, enable Developer mode → Load unpacked → choose `di
 
 ## Configure an AI model
 
-Open extension Side Panel via toolbar icon → Settings (⚙) → choose provider → choose/edit model ID → paste API key → Save. Use **Test connection** for a short request. Defaults: `gemini-2.5-flash`, `gpt-4.1-mini`, `deepseek-chat`. Models may change; use a model ID available to your account.
+Open extension Side Panel via toolbar icon → top-right Settings (⚙) → choose provider → choose/edit model ID → paste API key → Save. Use **Test connection** for a short request. Defaults: `gemini-2.5-flash`, `gpt-4.1-mini`, `deepseek-chat`. Models may change; use a model ID available to your account.
 
 API keys are session-only by default; persistent storage requires ticking a checkbox. The provider itself may charge for model calls. Use an account-specific limited key, never paste it into a GitHub issue.
 
@@ -24,8 +24,8 @@ API keys are session-only by default; persistent storage requires ticking a chec
 1. Open `https://arxiv.org/pdf/<valid-id>` (or abstract URL).
 2. Click PaperPeek icon and choose **Analyze current paper**. The extension downloads the public PDF, extracts page text locally and sends the limited text to your chosen model.
 3. Review Overview. Click validated evidence references to navigate to the claimed PDF page.
-4. Ask follow-up questions in **Ask** or select starter questions under **Explain**.
-5. **Card** → Copy Markdown or Download `.md` to any local knowledge base.
+4. Ask follow-up questions under **提问 (Ask)**. Select a compact starter row for method, experiments, formulas or intuition; there is no separate Explain tab.
+5. **卡片 (Card)** → Copy Markdown or Download `.md` to any local knowledge base.
 
 Alternative: **Open PDF** to select a file; no automatic page navigation is available from a locally uploaded file in this version.
 
