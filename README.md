@@ -4,9 +4,9 @@
 
 PaperPeek 是一个面向科研人员的 Chrome 侧边栏扩展，帮助理解**当前的一篇 PDF 论文**，快速判断研究价值、向论文提问，并导出便于回顾与 AI 再利用的简短 Markdown 论文卡片。
 
-> Status: **v0.1.1 experimental MVP**. Public arXiv PDFs are the primary test target. Not a PDF replacement, citation manager, archive or multi-paper knowledge base.
+> Status: **v0.1.2 experimental MVP**. Public arXiv PDFs are the primary test target. Not a PDF replacement, citation manager, archive or multi-paper knowledge base.
 
-## Current features (v0.1.1)
+## Current features (v0.1.2)
 
 - 🔎 从当前 arXiv PDF/摘要链接加载公开 PDF；支持本地手动打开 PDF
 - 🧠 PDF.js 提取分页正文，生成结构化中文论文概览
@@ -33,11 +33,11 @@ npm run build
 
 打开 `chrome://extensions` → 开启**开发者模式** → **加载已解压的扩展程序** → 选择项目的 `dist/` 文件夹。
 
-1. 点击 PaperPeek 图标，在右侧 Side Panel 打开设置（⚙）。
+1. 点击 PaperPeek 图标，在右侧 Side Panel 打开设置（右上角齿轮）。
 2. 选择 **Gemini / OpenAI / DeepSeek**，输入自己的模型 ID 和 API Key，保存并点击**测试连接**。
 3. 在浏览器中打开 `https://arxiv.org/pdf/<paper-id>` 或 `https://arxiv.org/abs/<paper-id>`，点击 **分析当前论文**。
-4. 在**概览 / 讲解 / 提问**中阅读和追问。打开**卡片**复制 Markdown 或下载 `.md` 文件。
-5. 解析失败时，可以点击**打开 PDF**手动选择文件。
+4. 在**概览 / 提问**中阅读和追问；讲解类问题由提问页的快捷入口发起。打开**卡片**复制 Markdown 或下载 `.md` 文件。
+5. 解析失败时，可以点击**选择 PDF**手动选择文件。
 
 详细说明见 [使用指南](docs/user-guide.md)。
 
