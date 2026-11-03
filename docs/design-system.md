@@ -1,114 +1,82 @@
-# PaperPeek design system — Reader UI v0.1.2
+# PaperPeek design system — compact Side Panel v0.1.3
 
-**Status:** Implemented · **Updated:** 2026-11-02 · **Scope:** Chrome Side Panel at ~280–500px. This is a local CSS token system; no imported React/Tailwind component library.
+**Status:** implemented as CSS tokens and DOM. **Owner:** maintainer. **Updated:** 2026-11-03.
 
-## 1. Why this design
+## Design goal and user mental model
 
-PaperPeek is a reading tool, **not a chatbot dashboard**. The user is already looking at the PDF. The extension should answer one question at a time while leaving maximum space for the source document.
+The PDF remains the main work surface; PaperPeek is a narrow reader companion. Before presenting any AI features it must answer: **which PDF**, **how to start**, and **where to ask**. Decoration must not consume paper-reading space.
 
-Inspiration, not copied code:
+Reference principles (no proprietary code reused): [GitHub Primer](https://primer.style/product/getting-started/foundations/layout/), [shadcn/ui](https://ui.shadcn.com/docs/theming), [Radix Typography](https://www.radix-ui.com/themes/docs/theme/typography), [Chrome Side Panel](https://developer.chrome.com/docs/extensions/reference/api/sidePanel).
 
-- [GitHub Primer — Layout](https://primer.style/product/getting-started/foundations/layout/): focused hierarchy, natural reading order, responsive narrow surfaces.
-- [shadcn/ui theming](https://ui.shadcn.com/docs/theming): semantic tokens for foreground, muted, border, primary, error; do not spread raw hex values across components.
-- [shadcn/ui compact styles](https://github.com/shadcn-ui/ui/blob/main/skills/shadcn/design-system.md): compact / Nova-like controls (roughly 32–36px), subtle borders instead of large cards and shadows.
-- [Radix Themes — Typography](https://www.radix-ui.com/themes/docs/theme/typography): consistent type scale and line-height.
-- [Chrome Extensions UI](https://developer.chrome.com/docs/extensions/develop/ui): Side Panel remains an adjunct to the user's active document.
-
-No third-party UI code/assets, font hosting or dependencies were added. Reference links document rationale, **not source-code reuse**.
-
-## 2. Experience principles
-
-1. **Paper before feature taxonomy.** Current source + one primary next action appears before any navigation.
-2. **One level of primary navigation.** Overview / Ask / Card. Explanation starters belong inside Ask; Settings is a utility action in the header.
-3. **Progressive disclosure.** API details and privacy guidance appear inside Settings; long privacy text in a collapsible details section.
-4. **Reading density, not dashboard density.** Digest sections are typographic blocks separated by hairlines, not individually boxed marketing cards.
-5. **Source integrity.** Verified PDF pages use textual links; unverified citations remain visibly unverified. Never use color alone to imply proof.
-6. **Honest state.** Empty view must tell the user the next actionable step: choose PDF, configure API key, or analyze a recognized PDF.
-7. **No decorative noise.** No emoji feature grids, gradients, fake loading animations, version badges or external brand slogans in content area.
-
-## 3. Layout and hierarchy
+## Information architecture
 
 \`\`\`text
-┌───────────────────────────────┐
-│ PaperPeek           [settings]│  60px app header
-├───────────────────────────────┤
-│ Current paper (if recognized) │  Compact source context + Analyze / Change
-├───────────────────────────────┤
-│ Overview   Ask   Card         │  43px navigation, only 3 destinations
-├───────────────────────────────┤
-│ Primary reading/task content  │  20px horizontal padding
-│                               │
-│ (chat composer at bottom in   │
-│  Ask when content is short)   │
-└───────────────────────────────┘
+┌───────────────────────────────────────┐
+│ PaperPeek / paper title   ↻  ↥  分析 ⚙ │  single header (min 65px)
+├───────────────────────────────────────┤
+│ 概览       提问        卡片             │  tabs (41px)
+├───────────────────────────────────────┤
+│ Paper overview, or actionable state   │
+│ / Q&A + prompt quick actions          │
+│ / Markdown export                     │
+└───────────────────────────────────────┘
 \`\`\`
 
-Settings replaces content and hides the document strip + tabs; explicit **Back to reading** returns to last task. It is not a fourth tab.
+The top row is **one header**, not separate application and paper toolbars. Compact brand and title share one identity block; a small group of explicit source actions is at the right. Long paper titles are ellipsized, with full value in the tooltip. The user can re-detect current tab, choose local file, analyze or open model settings without secondary bars.
 
-### Empty state model
+When a page offers multiple PDF sources, the source picker appears in the **Overview content region**, not in a persistent header. Settings replaces the three-tab content and has a Back action.
 
-| Context | Headline | Primary action |
+## Typography and spacing
+
+| Element | Size | Rule |
 |---|---|---|
-| No PDF | 从一篇论文开始 | 选择 PDF |
-| PDF present, API key missing | 先连接你的模型 | 配置 API Key |
-| PDF ready, key present | 论文已就绪 | The Analyze button in paper header |
-| Digest ready | Overview sections | PDF navigation / ask / export |
+| Primary reading text (digest/Q&A) | 14px, 1.75–1.8 line-height | Prioritize long academic Chinese paragraphs |
+| Digest lead | 15.5px, 1.8 | Give a quick paper gist without oversized hero |
+| Section label | 12px, semibold | Quiet heading, below body hierarchy |
+| Paper title in header | 13.5px, semibold | Single-line truncation to preserve controls |
+| Header brand | 11px | De-emphasized identity, not a billboard |
+| Tab | 13px | Three user tasks |
+| Input / action | 12.5–13.5px | Compact but readable |
+| Hints / metadata | 10.5–11.5px | Secondary information only |
 
-No duplicate primary button in an already-actionable state.
+Spacing scale: **4 / 8 / 12 / 16 / 20 / 24px**, default content gutter **16px** (12px at widths <=340px). Header min-height 65px; tabs 41px. Controls 30–36px high. Radii 6px and 9px only. No shadows, gradients, badges for decoration or remote fonts.
 
-## 4. Color tokens
+## Semantic colors
 
-Tokens live in \`src/styles.css\`; never add new raw component colors without updating this document. The light system is primary; \`prefers-color-scheme: dark\` is supported using the same semantic roles.
+CSS token source is \`src/styles.css\` with OS light/dark variants. Keep semantic role instead of hardcoding new component colors.
 
-| Token | Light | Role |
+| Token | Light | Purpose |
 |---|---|---|
-| \`--canvas\` | \`#ffffff\` | Reading background |
-| \`--surface\` | \`#ffffff\` | Inputs and secondary controls |
-| \`--subtle\` | \`#f6f7f8\` | Quiet user messages and markdown editor |
-| \`--text\` | \`#1b252d\` | Body ink |
-| \`--muted\` | \`#65717b\` | Subheadings, explanations |
-| \`--faint\` | \`#859099\` | Passive metadata / hints |
-| \`--border\` | \`#e5e8eb\` | Hairline dividers |
-| \`--border-strong\` | \`#cdd4d9\` | Interactive control boundary |
-| \`--primary\` | \`#1c685b\` | One accent for actions and source navigation |
-| \`--soft-accent\` | \`#ecf5f1\` | Non-error status |
-| \`--error\` | \`#ad3535\` | Error text |
-| \`--focus\` | \`#237c70\` | 2px keyboard focus outline |
+| \`--canvas\` | \`#fff\` | Reading background |
+| \`--surface\` | \`#fff\` | Inputs |
+| \`--subtle\` | \`#f6f7f8\` | Gentle separation |
+| \`--text\` | \`#1b252d\` | Reading text |
+| \`--muted\` | \`#596773\` | Labels |
+| \`--faint\` | \`#6a7680\` | Rare secondary hints |
+| \`--border\` | \`#e5e8eb\` | Hairline sections |
+| \`--primary\` | \`#1c685b\` | Primary action / source link |
+| \`--error\` | \`#a12f32\` | Warning with text explanation |
+| \`--focus\` | \`#237c70\` | Visible keyboard focus |
 
-Use text + icon/label for status; do not rely on green/red color alone.
+Use a readable color contrast and explicit words; no status conveyed by color alone.
 
-## 5. Spacing, type and radii
+## Component behavior
 
-- Spacing: **4 / 8 / 12 / 16 / 20 / 24px**. Default content gutter **20px**; reduce to 16px below 340px.
-- Controls: minimum **34px** height; text inputs ~37px; send action ~29px visually but surrounded by a larger composer (review touch targeting if mobile support is added).
-- Main UI font 13px, line-height 1.6. Overview lead 15px / 1.8. Page title 14px. Utility headings 11–12px. PaperPeek wordmark 16px.
-- Radii: **6px** for controls, **9px** for composer/messages. No large decorative 16–24px cards.
-- Elevation: **none**. Hairline borders separate information. Avoid shadows and glass effects.
-- Long titles clamp at 2 lines; source metadata is ellipsized. Digest/assistant text wraps naturally.
-- No remote fonts. System fallback includes Chinese fonts.
+- **Source detection:** icon button with title and accessible label, always available even if no PDF was detected. Never automatically upload document text to AI during detection.
+- **Local file:** icon button opens browser file picker; if current \`file://\` needs permission, render contextual explanation and a link to Chrome extension details.
+- **Main action:** single \`分析\` button only when a PDF source is selected; if API Key is missing, routes to Settings.
+- **Source candidates:** selection input appears only with multiple candidates, never auto-pick several unrelated files.
+- **Overview:** textual research structure with section dividers; verified PDF page link is underlined text.
+- **Ask:** compact question presets from the versioned registry (not duplicated hard-coded prompts); assistant answer is reading text, user question in subtle surface.
+- **Card:** copy and save actions disabled until digest exists.
+- **Models:** service selector, official list / refresh, custom ID override, per-provider Key persistence and explicit clear.
+- **Feedback:** small inline status, not large alerts or fake loading animation.
+- **Keyboard:** semantic buttons/tabs, tab arrow navigation, strong focus outlines, reduced motion.
 
-## 6. Components and behavior
+## Responsive/manual review
 
-| Component | Rules |
-|---|---|
-| Primary button | One in a contextual area; compact solid accent |
-| Secondary / ghost | For safe alternate actions only; no full-width promotional CTAs |
-| Tabs | Three tasks; 2px underline, \`role=tab\`, arrow-left/right keyboard navigation |
-| Source summary | Plain text sections with border-bottom, label plus content |
-| Evidence link | Textual \`PDF p.N ↗\`, shown as verified only when quote matches page |
-| Prompt suggestion | One-line full-width list row, not a card grid |
-| Chat | User text in quiet neutral surface, assistant response as reading prose |
-| Markdown card | Read-only source textarea, Copy / Save next to heading |
-| Settings | Clearly labeled inputs, opt-in key persistence, privacy details |
-| Feedback | Small inline live region; errors contain actionable explanations |
-| Focus | Visible 2px outline with offset; labels and accessible button names |
+Required screenshot widths **300 / 360 / 450px**, including long paper filename, pending PDF/permission, multiple source picker, full model dropdown, long response and dark mode. Verify no horizontal scrolling, no clipped settings actions, disabled states clear, and keyboard focus order. Test actual unpacked Chrome extension after static Chromium checks; CI DOM unit tests alone cannot prove full interaction.
 
-## 7. Interaction and accessibility QA
+## Change contract
 
-Test with Side Panel widths **300px / 360px / 450px**, tall and short viewports, keyboard-only tabbing, \`prefers-color-scheme: dark\`, \`prefers-reduced-motion\`, and long Chinese/English paper titles.
-
-Must verify: focus order, tab arrows, settings return path, empty-state actions, no clipped controls or horizontal scroll, and copy/download availability. Text from model and PDF must still be rendered as plain text, not HTML.
-
-## 8. Maintenance contract
-
-Any UI PR must describe: task affected, prior pain point, removed/added elements, updated states, keyboard impacts, screenshots at 300px/360px, and any new tokens. Keep \`docs/ui-design.md\`, this document, and \`tests/ui.test.ts\` synchronized.
+Update \`sidepanel.html\`, \`src/styles.css\`, \`src/main.ts\`, \`docs/ui-design.md\`, this file and \`tests/ui.test.ts\` when navigation or controls change. Do not add visual ornament without a documented user need.
