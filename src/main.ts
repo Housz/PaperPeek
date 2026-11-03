@@ -581,7 +581,7 @@ async function loadProviderForm(provider: Provider): Promise<void> {
   const stored = credentialDrafts[provider] || await loadCredentials(provider);
   if (requestId !== modelRequestSerial || providerInput.value !== provider) return;
   applyCredentials(stored);
-  if (provider !== "gemini" && stored.apiKey && !modelCatalogs[provider])
+  if (provider !== "gemini" && stored.apiKey)
     await refreshModelCatalog();
 }
 
@@ -613,7 +613,7 @@ document.querySelectorAll<HTMLButtonElement>(".tab").forEach(tab => {
 settingsToggle.addEventListener("click", () => {
   const open = currentView !== "settings";
   setView(open ? "settings" : lastReadingView);
-  if (open && keyInput.value && !modelCatalogs[providerInput.value as Provider])
+  if (open && keyInput.value && providerInput.value !== "gemini")
     void refreshModelCatalog();
 });
 settingsBack.addEventListener("click", () => setView(lastReadingView));
@@ -686,7 +686,7 @@ modelSelect.addEventListener("change", () => {
 refreshModelsBtn.addEventListener("click", () => void refreshModelCatalog());
 keyInput.addEventListener("blur", () => {
   const provider = providerInput.value as Provider;
-  if (keyInput.value.trim() && provider !== "gemini" && !modelCatalogs[provider])
+  if (keyInput.value.trim() && provider !== "gemini")
     void refreshModelCatalog();
 });
 settingsForm.addEventListener("submit", event => {
