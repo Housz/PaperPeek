@@ -611,28 +611,56 @@ document.querySelectorAll<HTMLButtonElement>(".tab").forEach(tab => {
   });
 });
 settingsToggle.addEventListener("click", () => {
-  setView(currentView === "settings" ? lastReadingView : "settings");
+  const open = currentView !== "settings";
+  setView(open ? "settings" : lastReadingView);
+  if (open && keyInput.value && !modelCatalogs[providerInput.value as Provider])
+    void refreshModelCatalog();
 });
 settingsBack.addEventListener("click", () => setView(lastReadingView));
 emptyAction.addEventListener("click", () => {
   if (emptyAction.dataset.action === "settings") setView("settings");
-  else fileInput.click();
+  else if (emptyAction.dataset.action === "file-access") openFileAccessSettings();
+  else void refreshActiveTab(true);
 });
+fileAccessBtn.addEventListener("click", openFileAccessSettings);
+function openFileAccessSettings(): void {
+  void chrome.tabs.create({ url: "chrome://extensions/?id=" + chrome.runtime.id });
+}
 analyzeBtn.addEventListener("click", () => void analyzeCurrent());
+detectBtn.addEventListener("click", () => void refreshActiveTab(true));
 uploadBtn.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", () => {
   const file = fileInput.files?.[0];
   if (file) void openLocal(file);
   fileInput.value = "";
 });
-document.querySelectorAll<HTMLButtonElement>("[data-prompt]").forEach(button => {
+sourceChooseBtn.addEventListener("click", () => {
+  if (sourceSelect.value) usePdfSource(sourceSelect.value);
+});
+pasteUrlForm.addEventListener("submit", event => {
+  event.preventDefault();
+  const url = pasteUrlInput.value.trim();
+  if (!allowedPdfSource(url)) {
+    showStatus("请填写 HTTPS PDF 地址，或使用顶部按钮选择本地文件。", true);
+    return;
+  }
+  usePdfSource(url);
+  pasteUrlInput.value = "";
+});
+for (const preset of PROMPT_PRESETS) {
+  const button = create("button", "prompt-row");
+  button.type = "button";
+  button.title = preset.description;
+  button.append(create("span", "", preset.label));
+  button.append(create("span", "", preset.description + " ↗"));
   button.addEventListener("click", () => {
-    askInput.value = button.dataset.prompt || "";
+    askInput.value = preset.prompt;
     setView("ask");
     askInput.focus();
   });
-});
-askForm.addEventListener("submit", (event) => {
+  presetList.append(button);
+}
+askForm.addEventListener("submit", event => {
   event.preventDefault();
   const question = askInput.value.trim();
   if (!question) return;
@@ -644,29 +672,63 @@ askInput.addEventListener("keydown", event => {
     event.preventDefault(); askForm.requestSubmit();
   }
 });
+
 providerInput.addEventListener("change", () => {
+  // Preserve unsaved drafts without copying another provider's key.
+  credentialDrafts[previousFormProvider] = formCredentials(previousFormProvider);
   const provider = providerInput.value as Provider;
-  modelInput.value = DEFAULT_MODELS[provider];
-  keyInput.value = "";
+  void loadProviderForm(provider).catch(() => showStatus("无法读取模型设置。", true));
+});
+modelSelect.addEventListener("change", () => {
+  if (modelSelect.value !== "__custom__") modelInput.value = modelSelect.value;
+  updateModelInputVisibility();
+});
+refreshModelsBtn.addEventListener("click", () => void refreshModelCatalog());
+keyInput.addEventListener("blur", () => {
+  const provider = providerInput.value as Provider;
+  if (keyInput.value.trim() && provider !== "gemini" && !modelCatalogs[provider])
+    void refreshModelCatalog();
 });
 settingsForm.addEventListener("submit", event => {
   event.preventDefault();
   const next = formCredentials();
+  if (!next.model || !next.apiKey) {
+    showStatus("请填写模型 ID 和当前服务商的 API Key。", true);
+    return;
+  }
   void saveCredentials(next).then(() => {
     credentials = next;
+    credentialDrafts[next.provider] = next;
     renderPaperState();
     renderOverview();
     setView(lastReadingView);
-    showStatus("模型设置已保存。");
+    showStatus("已保存 " + next.provider + " 的模型与 Key 设置。");
   }).catch(() => showStatus("无法保存设置。", true));
 });
 testBtn.addEventListener("click", () => {
   if (busy) return;
-  setBusy(true); showStatus("正在测试模型连接……");
-  void generateText({ ...formCredentials(), prompt: "Reply with OK only." })
-    .then(() => showStatus("连接成功。"))
+  const input = formCredentials();
+  if (!input.apiKey || !input.model) {
+    showStatus("请先提供模型和 API Key。", true);
+    return;
+  }
+  setBusy(true);
+  showStatus("正在验证模型是否支持当前请求…");
+  void generateText({ ...input, prompt: "Reply with OK only." })
+    .then(() => showStatus("模型生成测试通过。"))
     .catch(error => showStatus(error instanceof Error ? error.message : "连接失败。", true))
     .finally(() => setBusy(false));
+});
+clearKeyBtn.addEventListener("click", () => {
+  const provider = providerInput.value as Provider;
+  void forgetProviderKey(provider).then(() => {
+    keyInput.value = "";
+    rememberInput.checked = false;
+    if (credentials.provider === provider) credentials.apiKey = "";
+    delete credentialDrafts[provider];
+    renderPaperState();
+    showStatus("已清除 " + provider + " 保存的 API Key。");
+  }).catch(() => showStatus("清除 Key 失败。", true));
 });
 byId("copyBtn").addEventListener("click", () => {
   if (!cardText.value) { showStatus("请先生成论文概览。", true); return; }
