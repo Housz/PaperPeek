@@ -21,3 +21,12 @@ Verify manifest host/optional permissions; verify service worker and PDF.js work
 ## Boundaries and known gaps
 
 Client-only BYOK is not equivalent to a backend secret management solution. Password-protected PDFs, scanned PDFs and publisher login workflows are out of scope; user must not rely on PaperPeek for confidential research without reviewing the provider's data policy.
+
+## v0.1.3 expanded source/model boundaries
+
+- Chrome "Allow access to file URLs" allows extensive local file access. PaperPeek uses it **only for the current explicitly opened file PDF**; it never scans directories. Use file picker instead if this broad permission is unacceptable.
+- PDF detection on HTML pages reads only PDF source URLs from accessible DOM; it does not transmit arbitrary article page text to model. Explicit Detect may send HEAD or a small Range GET to the current website with permission, without cookies. File source path is redacted in model prompts and exported Markdown.
+- Optional HTTPS host permission is per actual PDF host. Credentials to a publisher site are not forwarded in v0.1.3; authenticated PDFs may require explicit user download.
+- Per-provider API Keys are distinct. A secret can only be durably saved by opt-in. Chrome local storage is **not encrypted**, and clearing the extension's key does not revoke a leaked provider key.
+- Do not log model list responses containing user data or HTTP request headers. Model list is from fixed official API endpoints, not arbitrary remote endpoint values.
+- Keep file URL, embedded HTML, dynamic PDF and prompt-injection regressions in CI and manual privacy review.
