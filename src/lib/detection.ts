@@ -38,7 +38,7 @@ export function collectDocumentCandidates(): string[] {
     "iframe[src], embed[src], object[data]"
   )) {
     const value = item instanceof HTMLObjectElement ? item.data : item.src;
-    test(value, "", item.type || "");
+    test(value, "", item.getAttribute("type") || "");
   }
   for (const link of document.querySelectorAll<HTMLAnchorElement>("a[href], link[href]")) {
     const text = (link.textContent || link.getAttribute("aria-label") || "").trim().slice(0, 100);
