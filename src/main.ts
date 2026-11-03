@@ -127,7 +127,7 @@ function create<K extends keyof HTMLElementTagNameMap>(
 }
 
 function renderSourceChooser(): void {
-  sourceChooser.hidden = candidates.length < 2 || !!paper;
+  sourceChooser.hidden = candidates.length < 2 || currentView === "settings";
   sourceSelect.replaceChildren();
   if (candidates.length < 2) return;
   for (const url of candidates) {
@@ -337,7 +337,7 @@ async function refreshActiveTab(thorough = false, rescan = false): Promise<void>
   const id = tab?.id;
   const changed = id !== activeTabId || url !== tabUrl;
   if (changed) {
-    const samePdf = !!paper && candidatePdfUrl(url) === paper.sourceUrl;
+    const samePdf = !!paper && (candidatePdfUrl(url) === paper.sourceUrl || url === paper.sourceUrl);
     activeTabId = id;
     tabUrl = url;
     if (!samePdf) {
@@ -747,7 +747,9 @@ byId("downloadBtn").addEventListener("click", () => {
 });
 chrome.tabs.onActivated.addListener(() => void refreshActiveTab());
 chrome.tabs.onUpdated.addListener((tabId, info) => {
-  if (tabId === activeTabId && info.url) void refreshActiveTab();
+  if (tabId !== activeTabId) return;
+  if (info.url) void refreshActiveTab();
+  else if (info.status === "complete") void refreshActiveTab(false, true);
 });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "session" && changes["paperpeek.selection"]) void acceptSelection();
