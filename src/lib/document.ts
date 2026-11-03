@@ -12,8 +12,13 @@ export function normalizeExtractedText(parts: { str?: string; hasEOL?: boolean }
 }
 
 export async function fetchPdf(url: string): Promise<ArrayBuffer> {
-  const response = await fetch(url, { credentials: "omit", redirect: "follow" });
-  if (!response.ok) throw new Error("PDF request failed (HTTP " + response.status + ").");
+  let response: Response;
+  try {
+    response = await fetch(url, { credentials: "omit", redirect: "follow" });
+  } catch {
+    throw new Error("无法重新获取 PDF：站点可能限制登录、跨域或临时下载链接。请在浏览器下载后，使用“选择本地 PDF”。");
+  }
+  if (!response.ok) throw new Error("PDF 获取失败（HTTP " + response.status + "）。可以尝试手动选择已下载的文件。");
   const declared = Number(response.headers.get("content-length") || 0);
   if (declared > MAX_PDF_BYTES) throw new Error("PDF exceeds 25 MB limit.");
   const reader = response.body?.getReader();
@@ -47,7 +52,7 @@ export async function fetchPdf(url: string): Promise<ArrayBuffer> {
 export async function parsePdf(bytes: ArrayBuffer, sourceUrl: string | null): Promise<Paper> {
   if (bytes.byteLength > MAX_PDF_BYTES) throw new Error("PDF exceeds 25 MB limit.");
   const header = new TextDecoder("ascii").decode(bytes.slice(0, 1024));
-  if (!header.includes("%PDF-")) throw new Error("This file does not appear to be a PDF.");
+  if (!header.includes("%PDF-")) throw new Error("此地址返回的不是 PDF 文件。请尝试重新检测或手动打开 PDF。");
   const loading = getDocument({ data: new Uint8Array(bytes) });
   const pdf = await loading.promise;
   try {
@@ -87,7 +92,7 @@ export async function parsePdf(bytes: ArrayBuffer, sourceUrl: string | null): Pr
       truncated
     };
     if (!pages.some(page => page.text.length > 50))
-      throw new Error("No selectable text found. Scanned PDFs require OCR (not in v0.1.1).");
+      throw new Error("No selectable text found. 扫描版 PDF 暂不支持（需要 OCR）。");
     return paper;
   } finally {
     await loading.destroy();
