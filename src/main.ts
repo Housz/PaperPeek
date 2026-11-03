@@ -495,20 +495,96 @@ async function ask(question: string): Promise<void> {
       showStatus(error instanceof Error ? error.message : "提问失败。", true);
   } finally { setBusy(false); }
 }
-function formCredentials(): Credentials {
-  return {
-    provider: providerInput.value as Provider,
-    model: modelInput.value.trim(),
-    apiKey: keyInput.value.trim(),
-    rememberKey: rememberInput.checked
-  };
+function selectedModel(): string {
+  return modelSelect.value === "__custom__" ? modelInput.value.trim() : modelSelect.value;
+}
+function formCredentials(provider: Provider = providerInput.value as Provider): Credentials {
+  return { provider, model: selectedModel(), apiKey: keyInput.value.trim(),
+    rememberKey: rememberInput.checked };
+}
+function updateModelInputVisibility(): void {
+  const custom = modelSelect.value === "__custom__" || providerInput.value === "gemini";
+  modelInput.hidden = !custom;
+  customModelLabel.hidden = !custom;
+  modelInput.disabled = !custom;
+  modelInput.required = custom;
+}
+function renderModelOptions(provider: Provider, configured: string): void {
+  modelSelect.replaceChildren();
+  const known = modelCatalogs[provider] || [];
+  const options = new Map<string, string>();
+  if (configured) options.set(configured,
+    known.some(m => m.id === configured) ? configured : configured + "（已配置）");
+  if (provider !== "gemini") {
+    if (!configured) options.set(DEFAULT_MODELS[provider], DEFAULT_MODELS[provider] + "（默认）");
+    for (const model of known) {
+      const suffix = model.contextWindow
+        ? " · " + (model.contextWindow / 1000).toFixed(0) + "k" : "";
+      options.set(model.id, model.label + suffix);
+    }
+  }
+  for (const [id, label] of options) {
+    const opt = create("option");
+    opt.value = id; opt.textContent = label; modelSelect.append(opt);
+  }
+  const custom = create("option");
+  custom.value = "__custom__";
+  custom.textContent = "手动填写模型 ID…";
+  modelSelect.append(custom);
+  modelSelect.value = provider === "gemini" || !options.has(configured)
+    ? "__custom__" : configured;
+  modelInput.value = configured;
+  updateModelInputVisibility();
+  refreshModelsBtn.hidden = provider === "gemini";
+  modelHint.textContent = provider === "gemini"
+    ? "Gemini 暂时通过自定义 ID 配置。"
+    : known.length
+      ? "已从官方模型接口获取 " + known.length + " 个候选；使用前仍应测试模型兼容性。"
+      : "可刷新官方列表。模型 ID 会直接用于实际 API 请求。";
 }
 function applyCredentials(input: Credentials): void {
   providerInput.value = input.provider;
-  modelInput.value = input.model;
+  previousFormProvider = input.provider;
   keyInput.value = input.apiKey;
   rememberInput.checked = input.rememberKey;
+  renderModelOptions(input.provider, input.model);
 }
+
+async function refreshModelCatalog(): Promise<void> {
+  const provider = providerInput.value as Provider;
+  if (provider === "gemini") return;
+  const apiKey = keyInput.value.trim();
+  if (!apiKey) {
+    modelHint.textContent = "先填写当前服务商的 API Key，才能获取模型列表。";
+    return;
+  }
+  const requestId = ++modelRequestSerial;
+  const currentSelection = selectedModel();
+  refreshModelsBtn.disabled = true;
+  modelHint.textContent = "正在从 " + (provider === "openai" ? "OpenAI" : "DeepSeek") + " 获取模型列表…";
+  try {
+    const models = await listModels(provider, apiKey);
+    if (requestId !== modelRequestSerial || providerInput.value !== provider) return;
+    modelCatalogs[provider] = models;
+    renderModelOptions(provider, currentSelection);
+    if (!models.length) modelHint.textContent = "官方列表没有匹配的聊天模型，请手动填写并测试。";
+  } catch (error) {
+    if (requestId !== modelRequestSerial || providerInput.value !== provider) return;
+    modelHint.textContent = error instanceof Error ? error.message : "获取模型列表失败。";
+  } finally {
+    if (requestId === modelRequestSerial) refreshModelsBtn.disabled = false;
+  }
+}
+
+async function loadProviderForm(provider: Provider): Promise<void> {
+  const requestId = ++modelRequestSerial;
+  const stored = credentialDrafts[provider] || await loadCredentials(provider);
+  if (requestId !== modelRequestSerial || providerInput.value !== provider) return;
+  applyCredentials(stored);
+  if (provider !== "gemini" && stored.apiKey && !modelCatalogs[provider])
+    await refreshModelCatalog();
+}
+
 async function acceptSelection(): Promise<void> {
   const data = await chrome.storage.session.get("paperpeek.selection");
   const selection = data["paperpeek.selection"] as
@@ -516,7 +592,7 @@ async function acceptSelection(): Promise<void> {
   if (!selection || !selection.text || !selection.at ||
       Date.now() - selection.at > 5 * 60_000) return;
   if (selection.tabId !== activeTabId ||
-      candidatePdfUrl(selection.url) !== activePdfUrl) return;
+      (candidatePdfUrl(selection.url) !== activePdfUrl && tabIdentity(selection.url) !== tabUrl)) return;
   askInput.value = "请解释论文中选中的这段话，并联系上下文：\n\n“" +
     selection.text.slice(0, 1600) + "”";
   await chrome.storage.session.remove("paperpeek.selection");
