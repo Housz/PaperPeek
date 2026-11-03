@@ -1,30 +1,45 @@
 import type { ChatMessage, Digest, Paper, Provider } from "./types";
 import { DEFAULT_MODELS } from "./types";
 import { fetchPdf, parsePdf } from "./lib/document";
-import { generateText } from "./lib/provider";
-import { askPrompt, overviewPrompt } from "./lib/prompts";
+import { generateText, listModels, type AvailableModel } from "./lib/provider";
+import { askPrompt, overviewPrompt, PROMPT_PRESETS } from "./lib/prompts";
 import { parseDigest } from "./lib/digest";
 import { markdownFilename, toMarkdown } from "./lib/markdown";
-import { candidatePdfUrl, isArxivUrl, permissionOrigin, sourcePageUrl } from "./lib/urls";
-import { loadCredentials, saveCredentials, type Credentials } from "./lib/storage";
+import {
+  allowedPdfSource, candidatePdfUrl, isArxivUrl, permissionOrigin, sourcePageUrl
+} from "./lib/urls";
+import {
+  collectDocumentCandidates, sanitizeDetectedCandidates, probePdfContentType
+} from "./lib/detection";
+import {
+  forgetProviderKey, loadCredentials, saveCredentials, type Credentials
+} from "./lib/storage";
 
-const byId = <T extends HTMLElement>(id: string): T => {
+const byId = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const element = document.getElementById(id);
   if (!element) throw new Error("Missing UI element: " + id);
   return element as T;
 };
-const paperContext = byId("paperContext");
 const paperTitle = byId("paperTitle");
+const paperSubtitle = byId("paperSubtitle");
+const paperState = byId("paperState");
 const primaryTabs = byId("primaryTabs");
 const settingsToggle = byId<HTMLButtonElement>("settingsToggle");
 const settingsBack = byId<HTMLButtonElement>("settingsBack");
+const detectBtn = byId<HTMLButtonElement>("detectBtn");
+const sourceChooser = byId("sourceChooser");
+const sourceSelect = byId<HTMLSelectElement>("sourceSelect");
+const sourceChooseBtn = byId<HTMLButtonElement>("sourceChooseBtn");
+const pasteUrlForm = byId<HTMLFormElement>("pasteUrlForm");
+const pasteUrlInput = byId<HTMLInputElement>("pasteUrlInput");
 const emptyTitle = byId("emptyTitle");
 const emptyDescription = byId("emptyDescription");
 const emptyAction = byId<HTMLButtonElement>("emptyAction");
 const emptyHint = byId("emptyHint");
+const fileAccessHint = byId("fileAccessHint");
+const fileAccessBtn = byId<HTMLButtonElement>("fileAccessBtn");
 const promptSuggestions = byId("promptSuggestions");
-const paperSubtitle = byId("paperSubtitle");
-const paperState = byId("paperState");
+const presetList = byId("presetList");
 const status = byId("status");
 const analyzeBtn = byId<HTMLButtonElement>("analyzeBtn");
 const uploadBtn = byId<HTMLButtonElement>("uploadBtn");
@@ -37,14 +52,23 @@ const askInput = byId<HTMLTextAreaElement>("askInput");
 const askBtn = byId<HTMLButtonElement>("askBtn");
 const cardText = byId<HTMLTextAreaElement>("cardText");
 const providerInput = byId<HTMLSelectElement>("providerInput");
+const modelSelect = byId<HTMLSelectElement>("modelSelect");
 const modelInput = byId<HTMLInputElement>("modelInput");
+const customModelLabel = byId("customModelLabel");
+const refreshModelsBtn = byId<HTMLButtonElement>("refreshModelsBtn");
+const modelHint = byId("modelHint");
 const keyInput = byId<HTMLInputElement>("keyInput");
 const rememberInput = byId<HTMLInputElement>("rememberInput");
 const settingsForm = byId<HTMLFormElement>("settingsForm");
 const testBtn = byId<HTMLButtonElement>("testBtn");
+const clearKeyBtn = byId<HTMLButtonElement>("clearKeyBtn");
 
 let activeTabId: number | undefined;
+let tabUrl = "";
 let activePdfUrl: string | null = null;
+let candidates: string[] = [];
+let scanPerformed = false;
+let filePermissionBlocked = false;
 let paper: Paper | null = null;
 let digest: Digest | null = null;
 let conversation: ChatMessage[] = [];
@@ -52,8 +76,13 @@ let busy = false;
 let currentView = "overview";
 let lastReadingView = "overview";
 let credentials: Credentials = {
-  provider: "gemini", model: DEFAULT_MODELS.gemini, rememberKey: false, apiKey: ""
+  provider: "deepseek", model: DEFAULT_MODELS.deepseek,
+  rememberKey: false, apiKey: ""
 };
+const modelCatalogs: Partial<Record<Provider, AvailableModel[]>> = {};
+const credentialDrafts: Partial<Record<Provider, Credentials>> = {};
+let modelRequestSerial = 0;
+let previousFormProvider: Provider = "deepseek";
 
 function showStatus(message: string, error = false): void {
   status.hidden = !message;
@@ -63,19 +92,20 @@ function showStatus(message: string, error = false): void {
 function setBusy(value: boolean): void {
   busy = value;
   analyzeBtn.disabled = value;
+  detectBtn.disabled = value;
   askBtn.disabled = value || !paper;
   askInput.disabled = value || !paper;
   testBtn.disabled = value;
   uploadBtn.disabled = value;
   emptyAction.disabled = value;
+  sourceChooseBtn.disabled = value;
 }
 function setView(view: string): void {
   currentView = view;
-  const isSettings = view === "settings";
-  if (!isSettings) lastReadingView = view;
-  primaryTabs.hidden = isSettings;
-  paperContext.hidden = isSettings || !(paper || activePdfUrl);
-  settingsToggle.setAttribute("aria-pressed", String(isSettings));
+  const settings = view === "settings";
+  if (!settings) lastReadingView = view;
+  primaryTabs.hidden = settings;
+  settingsToggle.setAttribute("aria-pressed", String(settings));
   document.querySelectorAll<HTMLElement>(".view").forEach(el => {
     el.hidden = el.dataset.view !== view;
   });
@@ -85,55 +115,103 @@ function setView(view: string): void {
     el.setAttribute("aria-selected", String(selected));
     el.tabIndex = selected ? 0 : -1;
   });
+  renderPaperState();
 }
-function create<K extends keyof HTMLElementTagNameMap>(tag: K, className = "", text = ""): HTMLElementTagNameMap[K] {
+function create<K extends keyof HTMLElementTagNameMap>(
+  tag: K, className = "", text = ""
+): HTMLElementTagNameMap[K] {
   const element = document.createElement(tag);
   if (className) element.className = className;
   if (text) element.textContent = text;
   return element;
 }
-function renderEmptyState(): void {
-  if (!activePdfUrl && !paper) {
-    emptyTitle.textContent = "从一篇论文开始";
-    emptyDescription.textContent = "打开 arXiv 论文，或选择本地 PDF。快速了解研究问题、方法和重要结果。";
-    emptyAction.textContent = "选择 PDF";
-    emptyAction.dataset.action = "upload";
-    emptyAction.hidden = false;
-    emptyHint.textContent = "一次只分析当前论文，不建立文献库。";
-  } else if (!credentials.apiKey.trim()) {
-    emptyTitle.textContent = "先连接你的模型";
-    emptyDescription.textContent = "论文已就绪。添加自己的 API Key 后，即可生成概览和提问。";
-    emptyAction.textContent = "配置 API Key";
-    emptyAction.dataset.action = "settings";
-    emptyAction.hidden = false;
-    emptyHint.textContent = "仅在你开始分析或提问后，正文才会发送到模型服务商。";
-  } else {
-    emptyTitle.textContent = "论文已就绪";
-    emptyDescription.textContent = "点击上方「分析论文」，获取研究问题、核心方法与关键证据。";
-    emptyAction.hidden = true;
-    emptyHint.textContent = "概览生成后可直接导出为 Markdown。";
+
+function renderSourceChooser(): void {
+  sourceChooser.hidden = candidates.length < 2 || !!paper;
+  sourceSelect.replaceChildren();
+  if (candidates.length < 2) return;
+  for (const url of candidates) {
+    const option = create("option");
+    option.value = url;
+    const u = new URL(url);
+    option.textContent = u.host + u.pathname.slice(0, 90) + (u.search ? "…" : "");
+    sourceSelect.append(option);
   }
 }
+
+function renderEmptyState(): void {
+  fileAccessHint.hidden = !filePermissionBlocked;
+  if (filePermissionBlocked) {
+    emptyTitle.textContent = "需要授权访问本地 PDF";
+    emptyDescription.textContent = "Chrome 默认可能阻止扩展读取 file:// 文件。开启文件访问权限后，返回这里重新检测。";
+    emptyAction.textContent = "打开扩展权限";
+    emptyAction.dataset.action = "file-access";
+    emptyAction.hidden = false;
+    emptyHint.textContent = "仅在用户明确开启权限后读取当前文件。";
+  } else if (candidates.length >= 2 && !activePdfUrl) {
+    emptyTitle.textContent = "找到了多个 PDF";
+    emptyDescription.textContent = "在上方选择需要分析的文件，避免误将网页里的其他附件当作当前论文。";
+    emptyAction.hidden = true;
+    emptyHint.textContent = "无法确定时，可粘贴论文的直接地址。";
+  } else if (!activePdfUrl && !paper) {
+    emptyTitle.textContent = scanPerformed ? "未找到可读取的 PDF" : "打开一篇论文";
+    emptyDescription.textContent = scanPerformed
+      ? "可以重新检测当前网页、粘贴 PDF 地址，或者选择本地文件。部分受保护的 PDF 无法自动获取。"
+      : "打开 PDF 后可以一键检测。支持 arXiv、出版社网页中的 PDF 链接及本地文件。";
+    emptyAction.textContent = "检测当前页面";
+    emptyAction.dataset.action = "detect";
+    emptyAction.hidden = false;
+    emptyHint.textContent = "也可以使用顶部的文件按钮选择 PDF。";
+  } else if (!credentials.apiKey.trim()) {
+    emptyTitle.textContent = "先配置模型";
+    emptyDescription.textContent = "论文已经识别。请配置自己的 API Key，再生成论文概览。";
+    emptyAction.textContent = "设置模型";
+    emptyAction.dataset.action = "settings";
+    emptyAction.hidden = false;
+    emptyHint.textContent = "正文仅在点击“分析”或主动提问后发送到所选模型。";
+  } else {
+    emptyTitle.textContent = "论文准备就绪";
+    emptyDescription.textContent = "点击右上角“分析”，提取研究问题、方法和关键结果。";
+    emptyAction.hidden = true;
+    emptyHint.textContent = "完成后可复制或下载 Markdown 论文卡片。";
+  }
+}
+
+function documentLabel(raw: string): string {
+  try {
+    const url = new URL(raw);
+    const filename = decodeURIComponent(url.pathname.split("/").pop() || "");
+    if (url.protocol === "file:") return filename || "本地 PDF";
+    return filename && filename.length <= 55 ? filename : url.hostname + " · PDF";
+  } catch { return "当前 PDF"; }
+}
+
 function renderPaperState(): void {
-  paperContext.hidden = currentView === "settings" || !(paper || activePdfUrl);
-  paperTitle.textContent = paper?.title || (activePdfUrl ? "当前 PDF" : "尚未打开论文");
+  const hasPaper = !!paper || !!activePdfUrl;
+  paperTitle.textContent = currentView === "settings" ? "模型与 API Key" :
+    paper?.title || (activePdfUrl ? documentLabel(activePdfUrl) : "未选择论文");
+  paperTitle.title = paperTitle.textContent || "";
   paperSubtitle.textContent = paper
-    ? paper.totalPages + " 页 · " + (paper.sourceUrl ? "在线 PDF" : "本地 PDF") +
-      (paper.truncated ? " · 正文已截断" : "")
-    : activePdfUrl ? activePdfUrl : "";
+    ? paper.totalPages + " 页" + (paper.truncated ? " · 文本已截断" : "")
+    : activePdfUrl || "";
+  paperState.hidden = !hasPaper || currentView === "settings";
   paperState.textContent = digest ? "已分析" : paper ? "已读取" : "待分析";
-  analyzeBtn.textContent = !credentials.apiKey.trim()
-    ? "配置模型" : digest ? "重新分析" : "分析论文";
+  analyzeBtn.hidden = currentView === "settings" || !hasPaper;
+  analyzeBtn.textContent = !credentials.apiKey.trim() ? "设置" :
+    digest ? "重新分析" : "分析";
   askBtn.disabled = busy || !paper;
   askInput.disabled = busy || !paper;
   byId<HTMLButtonElement>("copyBtn").disabled = !cardText.value;
   byId<HTMLButtonElement>("downloadBtn").disabled = !cardText.value;
   renderEmptyState();
 }
+
 function resetPaper(): void {
   paper = null; digest = null; conversation = []; cardText.value = "";
-  overviewContent.replaceChildren(); renderOverview(); renderChat(); renderPaperState();
+  overviewContent.replaceChildren();
+  renderOverview(); renderChat(); renderPaperState();
 }
+
 function makeCard(title: string, text: string | string[], lead = false): HTMLElement {
   const section = create("section", lead ? "digest-section lead" : "digest-section");
   section.append(create("h3", "", title));
@@ -219,16 +297,104 @@ async function navigateToPage(page: number): Promise<void> {
   try { await chrome.tabs.update(activeTabId, { url: sourcePageUrl(paper.sourceUrl, page) }); }
   catch { showStatus("无法自动跳转 PDF；可手动查看第 " + page + " 页。", true); }
 }
-async function refreshActiveTab(): Promise<void> {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const url = candidatePdfUrl(tab?.url);
-  if (tab?.id !== activeTabId || url !== activePdfUrl) {
-    activeTabId = tab?.id; activePdfUrl = url;
-    showStatus("");
-    if (paper) resetPaper();
-  }
-  renderPaperState();
+function tabIdentity(raw?: string): string {
+  if (!raw) return "";
+  try { const u = new URL(raw); u.hash = ""; return u.href; }
+  catch { return raw; }
 }
+
+async function fileAccessAllowed(): Promise<boolean> {
+  try { return await chrome.extension.isAllowedFileSchemeAccess(); }
+  catch { return false; }
+}
+
+async function requestHostAccess(raw: string): Promise<boolean> {
+  if (raw.startsWith("file:")) return fileAccessAllowed();
+  if (isArxivUrl(raw)) return true;
+  const origin = permissionOrigin(raw);
+  if (await chrome.permissions.contains({ origins: [origin] })) return true;
+  // Only called from user-triggered Detect/Analyze actions.
+  return chrome.permissions.request({ origins: [origin] });
+}
+
+async function inspectPage(tabId: number): Promise<string[]> {
+  try {
+    const result = await chrome.scripting.executeScript({
+      target: { tabId }, func: collectDocumentCandidates
+    });
+    const values = result.flatMap(item => Array.isArray(item.result) ? item.result : []);
+    return sanitizeDetectedCandidates(values);
+  } catch {
+    // Protected Chrome PDF viewer and cross-origin iframes may not be scriptable.
+    return [];
+  }
+}
+
+/** Automatically scans current tab and DOM; explicit Detect may also use HEAD. */
+async function refreshActiveTab(thorough = false): Promise<void> {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const url = tabIdentity(tab?.url);
+  const id = tab?.id;
+  const changed = id !== activeTabId || url !== tabUrl;
+  if (changed) {
+    const samePdf = !!paper && candidatePdfUrl(url) === paper.sourceUrl;
+    activeTabId = id;
+    tabUrl = url;
+    if (!samePdf) {
+      activePdfUrl = candidatePdfUrl(url);
+      candidates = [];
+      scanPerformed = false;
+      filePermissionBlocked = false;
+      if (paper) resetPaper();
+    }
+  }
+  filePermissionBlocked = !!activePdfUrl?.startsWith("file:") && !(await fileAccessAllowed());
+  if (id !== undefined && !filePermissionBlocked && (changed || thorough)) {
+    // One script attempt without prompting; PDF native viewer may reject it.
+    let found = await inspectPage(id);
+    if (!found.length && thorough && url.startsWith("https:")) {
+      try {
+        // User-triggered retry can ask for current page's host access.
+        if (await requestHostAccess(url)) found = await inspectPage(id);
+      } catch { /* Manual URL/file fallback remains available. */ }
+    }
+    if (!activePdfUrl && found.length === 1) {
+      activePdfUrl = found[0];
+      candidates = found;
+    } else if (found.length >= 2) {
+      candidates = found;
+    }
+  }
+  if (thorough && !activePdfUrl && candidates.length < 2 && url.startsWith("https:")) {
+    try {
+      if (await requestHostAccess(url) && await probePdfContentType(url))
+        activePdfUrl = url;
+    } catch { /* Not a directly accessible PDF. */ }
+  }
+  if (thorough) scanPerformed = true;
+  renderSourceChooser(); renderOverview(); renderPaperState();
+  if (thorough) {
+    if (filePermissionBlocked) showStatus("需要启用“允许访问文件网址”后才能读取本地 PDF。", true);
+    else if (activePdfUrl) showStatus("已找到 PDF。可以点击“分析”开始阅读。");
+    else if (candidates.length > 1) showStatus("找到 " + candidates.length + " 个候选 PDF，请选择。");
+    else showStatus("未找到可直接获取的 PDF，可粘贴链接或选择本地文件。", true);
+  }
+}
+
+function usePdfSource(url: string): void {
+  if (!allowedPdfSource(url)) { showStatus("仅支持 HTTPS 或已授权的本地 PDF 地址。", true); return; }
+  const parsed = new URL(url);
+  parsed.hash = "";
+  const next = parsed.href;
+  if (next !== activePdfUrl) resetPaper();
+  activePdfUrl = next;
+  candidates = [];
+  filePermissionBlocked = false;
+  scanPerformed = true;
+  renderSourceChooser(); renderPaperState(); renderOverview();
+  showStatus("已选择 PDF。点击“分析”读取正文。");
+}
+
 function currentRequest(prompt: string, json = false) {
   if (!credentials.apiKey.trim()) throw new Error("请先在设置中配置 API Key。");
   return {
@@ -260,35 +426,39 @@ async function analyzeCurrent(): Promise<void> {
   if (busy) return;
   if (!credentials.apiKey.trim()) {
     setView("settings");
-    showStatus("先配置 API Key，再分析论文。");
+    showStatus("先配置当前服务商的 API Key。");
     return;
   }
   if (paper) { await summarize(); return; }
   if (!activePdfUrl) {
-    showStatus("未识别到 PDF。请打开 arXiv PDF 链接或选择本地 PDF。", true); return;
+    showStatus("尚未选择 PDF。请点击重新检测、选择链接或打开本地文件。", true);
+    return;
   }
   const url = activePdfUrl;
   const tabId = activeTabId;
   try {
-    if (!isArxivUrl(url)) {
-      const origin = permissionOrigin(url);
-      const granted = await chrome.permissions.request({ origins: [origin] });
-      if (!granted) throw new Error("需要当前 PDF 网站的读取权限。");
+    if (!(await requestHostAccess(url))) {
+      filePermissionBlocked = url.startsWith("file:");
+      renderOverview();
+      throw new Error(filePermissionBlocked
+        ? "请到 Chrome 扩展详情页打开“允许访问文件网址”，再重新分析。"
+        : "需要先授权该 PDF 网站的读取权限。");
     }
-    setBusy(true); showStatus("正在读取并解析 PDF……");
+    setBusy(true);
+    showStatus("正在提取 PDF 正文…");
     const bytes = await fetchPdf(url);
     const loaded = await parsePdf(bytes, url);
-    // Reject a stale load after switching browser tabs.
     if (url !== activePdfUrl || tabId !== activeTabId)
-      throw new Error("标签页已切换，请重新分析当前论文。");
+      throw new Error("检测到标签页发生变化，请重新分析。");
     paper = loaded; digest = null; conversation = [];
     renderOverview(); renderChat(); renderPaperState();
   } catch (error) {
-    showStatus(error instanceof Error ? error.message : "无法读取 PDF。可以尝试手动打开文件。", true);
+    showStatus(error instanceof Error ? error.message : "无法读取该 PDF。可以选择本地文件。", true);
     return;
   } finally { setBusy(false); }
   await summarize();
 }
+
 async function openLocal(file: File): Promise<void> {
   if (busy) return;
   const tabId = activeTabId;
