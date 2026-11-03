@@ -2,6 +2,26 @@
 
 All notable changes are recorded here. Versions follow semantic versioning for MVP milestones.
 
+## [0.1.3] - 2026-11-03
+
+### Added
+- PDF redetection, publisher HTML PDF link/embed discovery, multiple candidate picker and manual URL fallback.
+- Direct local `file://` PDF handling with Chrome file scheme permission guidance.
+- On-demand HEAD MIME and bounded Range GET signature probing for extensionless public PDF URLs.
+- Official OpenAI and DeepSeek model list fetching, refresh and custom ID fallback; per-provider BYOK settings and explicit local key persistence.
+- Versioned scientific reading prompt library with Chinese (English) term conventions, methods, experiments, formulas, terminology and evidence presets.
+- Source/model/storage/prompt/UI regression tests and detailed support/evaluation documentation.
+
+### Changed
+- Merged app and paper header into one compact row; increased reading typography and reduced UI redundancy.
+- DeepSeek default fallback uses `deepseek-flash`; existing user model choices are preserved.
+- Gemini adapter remains unchanged in this cycle.
+
+### Known limits
+- Signed, POST-only, cookie-protected, cross-origin embedded and `blob:` PDF sources may still require manual download/upload.
+- Official model catalog membership does not guarantee Chat Completions compatibility.
+- Automatic real publisher website compatibility and live model-provider calls still need user-controlled browser smoke validation.
+
 ## [0.1.2] - 2026-11-02
 
 ### Changed
