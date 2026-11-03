@@ -31,7 +31,8 @@ export interface Settings {
   rememberKey: boolean;
 }
 export const DEFAULT_MODELS: Record<Provider, string> = {
-  gemini: "gemini-2.5-flash",
-  openai: "gpt-4.1-mini",
-  deepseek: "deepseek-chat"
+  gemini: "gemini-2.5-flash", // Gemini refinement is separate from this release.
+  openai: "gpt-4.1-mini", // Fallback only: live model catalog takes precedence.
+  deepseek: "deepseek-flash"
 };
+export const PROVIDERS: Provider[] = ["deepseek", "openai", "gemini"];
