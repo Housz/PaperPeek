@@ -4,11 +4,13 @@ This file is the **entry point for coding agents and new maintainers**. Read it 
 
 ## Mission and frozen scope
 
-Version v0.1.1 is a **single current-PDF** reading helper with structure-focused summaries, Q&A, a short reusable Markdown Paper Card, and local BYOK provider settings. Public arXiv PDFs first. No backend, no user accounts, no paper library, no external integrations, no automatic publication or notebook sync.
+Version v0.1.3 is a **single current-PDF** reading helper with structure-focused summaries, Q&A, a short reusable Markdown Paper Card, and local BYOK provider settings. Public arXiv and permissioned local/public PDF sources first. No backend, no user accounts, no paper library, no external integrations, no automatic publication or notebook sync.
 
 ## Read order
 
 1. `docs/requirements.md` — accepted behavior and out-of-scope items
+   - `docs/pdf-support.md`: URL/file/HTML detection, permission boundaries, unsupported sources
+   - `docs/prompts.md`: versioned bilingual research prompt contracts and evals
 2. `docs/architecture.md` — modules and trust boundaries
 3. `docs/security.md` — key storage, network, untrusted PDF
 4. `docs/testing.md` — automated/manual acceptance
@@ -21,13 +23,14 @@ Version v0.1.1 is a **single current-PDF** reading helper with structure-focused
 - `public/manifest.json` Chrome MV3 permissions
 - `src/background.ts` right-click selection and panel opening
 - `sidepanel.html`, `src/styles.css`, `src/main.ts` UI and transient session
-- `src/lib/urls.ts` source URL handling, permission matching, page fragments
+- `src/lib/urls.ts` URL normalization/safe source gates
+- `src/lib/detection.ts` HTML source discovery and explicit MIME/signature probes
 - `src/lib/document.ts` public fetch and PDF.js parsing
 - `src/lib/prompts.ts` paper prompts, context and multi-turn Q&A
 - `src/lib/provider.ts` OpenAI / Gemini / DeepSeek REST adapters
 - `src/lib/digest.ts` schema validation and quote/page verification
 - `src/lib/markdown.ts` deterministic Markdown export
-- `src/lib/storage.ts` settings and session/opt-in local key storage
+- `src/lib/storage.ts` per-provider BYOK profiles, opt-in persistent keys, legacy migration
 - `tests/` deterministic unit tests; no real API credentials
 - `.github/workflows/ci.yml` checks and packaged extension build
 
@@ -35,7 +38,7 @@ Version v0.1.1 is a **single current-PDF** reading helper with structure-focused
 
 1. **No hardcoded keys.** Do not copy any secret from chat, local machine or CI into repository, issue, screenshot, error log or commit history.
 2. **No backend.** Provider requests originate in trusted extension context; do not introduce a proxy or account system unless requirements change.
-3. **No silent uploads.** Only user-triggered analysis/Q&A may transmit extracted PDF contents to the selected provider.
+3. **No silent uploads.** Detection can inspect current page DOM; explicit retry can make a bounded request to the current host. No AI calls without Analyze/Ask. Only user-triggered analysis/Q&A may transmit extracted PDF contents to the selected provider.
 4. **No raw model HTML.** All PDF/model text goes into `textContent` / textarea, never unsanitized `innerHTML`.
 5. **No fabricated citations.** Verified findings require an exact normalized quote on the claimed PDF page. Other page hints must be labeled unverified.
 6. **No hidden archive.** Store only settings and intentional key persistence; keep paper sessions transient.
@@ -54,3 +57,10 @@ Version v0.1.1 is a **single current-PDF** reading helper with structure-focused
 ## Future architecture decisions
 
 Write an ADR in `docs/decisions/` for migration to MIME Handler, PDF.js viewer, secret storage change, remote backend, or retrieval infrastructure. Keep rejected alternatives recorded, not silently removed.
+
+## v0.1.3 checks
+
+- Updating PDF detection requires permission-on/off, candidate list, file:// and dynamic endpoint regression tests.
+- Updating provider settings requires per-provider key isolation, session vs local retention, legacy migration and official GET /models mock tests.
+- Updating prompt templates requires bilingual first mention and evidence abstention checks; bump PROMPT_LIBRARY_VERSION on substantive changes.
+- Use `docs/verification.md` to distinguish CI green from manually verified publisher/Chrome behavior.
