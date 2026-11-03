@@ -1,55 +1,73 @@
-# User guide — PaperPeek v0.1.2
+# PaperPeek user guide — v0.1.3
 
-## Requirements / setup
+**Chrome 116+ · single research PDF · no PaperPeek backend.** Experimental extension; test with public materials first.
 
-Chrome 116+, Node 22.12+, npm. From repository root:
+## Install
 
-```bash
+Node.js 22.12+ and npm:
+
+\`\`\`bash
 npm install
 npm run check
 npm test
 npm run build
-```
+\`\`\`
 
-At `chrome://extensions`, enable Developer mode → Load unpacked → choose `dist`. Pin the PaperPeek extension if helpful. For source edits run `npm run dev`, then reload the extension.
+In Chrome open \`chrome://extensions\`, enable Developer mode → Load unpacked → select \`dist/\`.
 
-## Configure an AI model
+## Quick start
 
-Open extension Side Panel via toolbar icon → top-right Settings (⚙) → choose provider → choose/edit model ID → paste API key → Save. Use **Test connection** for a short request. Defaults: `gemini-2.5-flash`, `gpt-4.1-mini`, `deepseek-chat`. Models may change; use a model ID available to your account.
+1. Open a PDF in Chrome, or an article page that has a PDF download/link.
+2. Click PaperPeek. The **single top row** contains the current source, **↻ Detect**, **choose file**, **Analyze** and Settings.
+3. If no PDF was automatically recognized, click **重新检测**. The extension checks PDF links/embeds and, on a direct dynamic URL, may probe its PDF response type. Several candidates? Select the intended paper.
+4. If detection is impossible, expand **无法自动识别？粘贴 PDF 地址** and enter a public HTTPS URL, or choose local PDF with the file button.
+5. Open Settings → choose DeepSeek / OpenAI → enter API Key → click **刷新官方列表** to fetch model options; select model and **测试模型**. The chosen ID is used directly in the API call. There is a **手动填写模型 ID** option for models absent from the list.
+6. **保存设置** to apply. For API Key reuse after browser restart, check **在此设备保存 Key（关闭后仍可使用）**. This is *opt-in* and local storage is not an encrypted vault.
+7. Click **分析**. Read Overview; ask questions or choose research prompt presets; copy/download Card as \`.md\`.
 
-API keys are session-only by default; persistent storage requires ticking a checkbox. The provider itself may charge for model calls. Use an account-specific limited key, never paste it into a GitHub issue.
+## Read the PDF already opened locally (\`file://\`)
 
-## Analyze one paper
+Previously PaperPeek ignored \`file://\` URLs. Now it recognizes \`file:///.../paper.pdf\` opened in Chrome, subject to **file scheme permission**.
 
-1. Open `https://arxiv.org/pdf/<valid-id>` (or abstract URL).
-2. Click PaperPeek icon and choose **Analyze current paper**. The extension downloads the public PDF, extracts page text locally and sends the limited text to your chosen model.
-3. Review Overview. Click validated evidence references to navigate to the claimed PDF page.
-4. Ask follow-up questions under **提问 (Ask)**. Select a compact starter row for method, experiments, formulas or intuition; there is no separate Explain tab.
-5. **卡片 (Card)** → Copy Markdown or Download `.md` to any local knowledge base.
+1. Open the PDF locally in Chrome.
+2. At \`chrome://extensions\`, find **PaperPeek**, open its detail page, enable **Allow access to file URLs / 允许访问文件网址**.
+3. Return to the local PDF tab and click **↻ 重新检测** → **分析**.
 
-Alternative: **Open PDF** to select a file; no automatic page navigation is available from a locally uploaded file in this version.
+If you cannot enable that permission, the file-picker button still allows you to share **one chosen PDF** with the extension. The local file path is never included in model prompts or exported Markdown.
 
-For PDFs on other HTTPS origins ending in `.pdf`, the extension will ask for optional host access. Authenticated publishers, embedded PDF viewers and one-time links are not guaranteed. `file://` tab auto-reading is not supported: use manual upload.
+## Other websites
 
-## Selection context menu
+- **Direct \`.pdf\` URL:** recognized on HTTPS. The first analysis from a non-preauthorized website prompts for permission to that host.
+- **Article page with \`iframe/embed/object\` or a PDF button:** detected using a DOM scan (works on ordinary accessible HTML). It does **not** search in restricted cross-origin frames.
+- **Public URL without \`.pdf\` suffix:** explicit detection checks HEAD MIME; if inconclusive, a short ranged GET checks PDF signature.
+- **Signed or authenticated publisher content:** may fail, because PaperPeek does not send login cookies by default. Save the permitted PDF yourself and use the file picker.
+- **Blob URL, POST-only download, image-only PDF:** no automatic re-fetch/OCR. A later enhanced reader may cover more scenarios.
 
-Right-click selected text → `Explain with PaperPeek`. Chrome may not expose text selection from its internal PDF Viewer to third-party extensions. When it does, the quoted passage is inserted into Ask. If not, copy the sentence into Ask manually.
+See [PDF support matrix](pdf-support.md).
 
-## Output quality
+## AI providers and model selection
 
-Paper Card contains Title, Authors, Source URL (if available), TL;DR, Problem, Approach, Findings, Limitations and Keywords. It is a summary, **not the PDF**. Verified page badges mean a model-supplied quote matched text extracted from that page; this does not independently prove the scientific interpretation. Chat page numbers are only unverified navigation hints.
+Model list endpoints for **OpenAI** and **DeepSeek** are their official APIs. The list updates on entering Settings with an existing key and via **刷新官方列表**. Not all listed OpenAI models support the current **Chat Completions** API; always use **测试模型** before analyzing an entire PDF. Custom ID fallback is available; the current model configuration is not a cosmetic field.
+
+DeepSeek fallback ID: \`deepseek-flash\` (the official catalog decides availability). OpenAI fallback ID: \`gpt-4.1-mini\`. Existing users' previously saved model choices remain until explicitly changed. Gemini uses a manually entered model ID this iteration; no Gemini API behavior change.
+
+API keys are stored **separately per provider**. Switching providers does not copy the previous provider's key. Session keys disappear after browser session ends. Optional long-term local persistence survives reopening, until you press **清除 Key** or delete extension data.
+
+## Reading and reusable Markdown
+
+Overview highlights research problem, mechanism, evidence/limitations. Key technical terms should first appear as **中文术语（English Term）**. Assistant may make errors; verified findings link to text that matched a specific physical PDF page, while general chat page hints are not independently verified. Card is a concise stable Markdown digest, not a transcript or a substitute for the paper.
 
 ## Troubleshooting
 
-| Symptom | Action |
+| Problem | What to try |
 |---|---|
-| No relevant PDF URL | Open direct arXiv PDF or use Open PDF |
-| Failed to fetch | Check public URL, permission and network; try manual upload |
-| No selectable text | PDF may be scanned; OCR not supported |
-| 401 / 403 | Check API key, account permissions and provider |
-| 429 | Check model quotas / balance / rate limit |
-| Long paper truncated | Summary covers only input text; do not treat it as exhaustive |
-| No page hyperlink | Evidence quote could not be verified or file is local |
-| Formula text is poor | PDF layout issue; direct image crop planned, not yet available |
+| Local file can't load | Enable file URL access in extension details; alternatively choose file |
+| Current page not recognized | Click ↻, choose candidate, paste PDF URL, or choose file |
+| Site asks for login / download fails | Save allowed file via browser, then choose it manually |
+| API model list fails | Check key/permissions, choose custom ID and Test Model |
+| Model 404 | Refresh official list, choose a supported model, retest |
+| Key vanishes after restart | Enable opt-in local key persistence and Save; confirm provider |
+| Unsupported scanned PDF | OCR is not yet shipped |
+| Formula/figure garbled | PDF.js text extraction may lose layout; visual crop is not shipped |
 
-If a bug is reproducible, report Chrome version, *public* arXiv link, model name (never key), symptoms and console errors with secrets removed.
+Never paste keys in issues, screenshots or debugging logs. Use a separate limited-quota API key.
