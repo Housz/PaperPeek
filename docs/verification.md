@@ -1,4 +1,4 @@
-# Verification report — PaperPeek v0.1.2
+# Verification report — PaperPeek (through v0.1.3)
 
 **Date:** 2026-11-02  
 **Status:** automated checks successful; real browser end-to-end and live provider call **not yet verified**.
@@ -52,3 +52,23 @@ Follow [testing.md](testing.md), especially M01–M15, on desktop Chrome. Use an
 - Visual layout was inspected in an isolated headless Chromium using the **actual Vite-produced sidepanel HTML/CSS** plus representative *static* mock paper/response content. Widths: **300px, 360px, 450px**. No horizontal overflow observed; inspected Overview, Ask, Card, Settings and a dark-mode empty state.
 - This visual check was not a real extension API / PDF / LLM end-to-end test: local navigation was blocked by sandbox policy, so snapshots used \`page.set_content\` rather than the actual extension runtime. Real Side Panel accessibility and runtime behavior in desktop Chrome remain manual release criteria.
 - Fixed a contrast issue discovered during review: small muted text token \`--faint\` was changed from \`#859099\` to \`#6a7680\` to meet >=4.5:1 on white. Disabled Copy/Save before card generation.
+
+## v0.1.3 — expanded PDF detection, model catalog, scientific prompts (2026-11-03)
+
+**Automated check:** [GitHub Actions run 41659198358](https://github.com/Housz/PaperPeek/actions/runs/41659198358) completed successfully on the feature branch after the latest model-refresh and PDF-error changes. Strict TypeScript, Vitest, and Vite extension packaging all passed. An earlier passing v0.1.3 run 41658003460 reported **8 test files / 33 tests passing**; model/source/prompt/security tests use fake model responses and no real API keys.
+
+**Build verification:** the unpacked extension includes `manifest.json`, `sidepanel.html`, `assets/background.js`, bundled local JS/CSS and the PDF.js worker. Packaging does not imply Chrome runtime success.
+
+**Static interface review:** actual built HTML/CSS was inspected with isolated Chromium snapshots at **300, 360, and 450 px**, including paper overview, settings, and dark mode empty state. No horizontal overflow observed; one shared header measured approximately 65 px; reading body text uses 14 px. This is static visual inspection, **not** an end-to-end extension test.
+
+**Not yet proven by real desktop Chrome tests:**
+- Direct automatic reading of a `file://` tab with Chrome's "Allow access to file URLs" toggle both OFF and ON.
+- Publisher-host HTML `iframe/embed/object` detection, selection of the correct candidate, and HTTP redirect/CDN behavior.
+- Dynamic no-`.pdf` endpoint via real HEAD and ranged GET on multiple real sites.
+- OpenAI and DeepSeek official `GET /models` from a user-owned browser key, successful model generation, restart persistence.
+- Prompt content accuracy, bilingual first mention consistency, quote-semantic correctness over an expert-audited PDF corpus.
+- Full real-extension keyboard/permission navigation and security posture across Chrome versions.
+
+**Environment blocker:** the isolated automated browser environment did not successfully register a locally loaded unpacked extension service worker; thus live Chrome extension, local-file, and provider tests were not completed. Headless `page.set_content` screenshots only validate markup/style, not Chrome APIs.
+
+**Release decision:** v0.1.3 remains an experimental MVP suitable for owner-run Chrome smoke tests, not a blanket guarantee for publisher or restricted PDFs. Follow [PDF support matrix](pdf-support.md), [test matrix](testing.md), and [Prompt evaluation plan](prompts.md). Never attach credentials or proprietary PDFs to tickets.
