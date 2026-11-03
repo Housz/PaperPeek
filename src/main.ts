@@ -331,7 +331,7 @@ async function inspectPage(tabId: number): Promise<string[]> {
 }
 
 /** Automatically scans current tab and DOM; explicit Detect may also use HEAD. */
-async function refreshActiveTab(thorough = false): Promise<void> {
+async function refreshActiveTab(thorough = false, rescan = false): Promise<void> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const url = tabIdentity(tab?.url);
   const id = tab?.id;
@@ -349,7 +349,7 @@ async function refreshActiveTab(thorough = false): Promise<void> {
     }
   }
   filePermissionBlocked = !!activePdfUrl?.startsWith("file:") && !(await fileAccessAllowed());
-  if (id !== undefined && !filePermissionBlocked && (changed || thorough)) {
+  if (id !== undefined && !filePermissionBlocked && (changed || thorough || rescan)) {
     // One script attempt without prompting; PDF native viewer may reject it.
     let found = await inspectPage(id);
     if (!found.length && thorough && url.startsWith("https:")) {
@@ -757,7 +757,7 @@ async function init(): Promise<void> {
   try {
     credentials = await loadCredentials();
     applyCredentials(credentials);
-    await refreshActiveTab();
+    await refreshActiveTab(false, true);
     await acceptSelection();
   } catch {
     showStatus("浏览器存储或标签页访问失败，请重新打开插件。", true);
