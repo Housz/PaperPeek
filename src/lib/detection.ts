@@ -65,18 +65,36 @@ export async function probePdfContentType(
 ): Promise<boolean> {
   if (!allowedPdfSource(raw) || !raw.startsWith("https:")) return false;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10_000);
+  const timer = setTimeout(() => controller.abort(), 12_000);
   try {
+    let head: Response | null = null;
+    try {
+      head = await fetcher(raw, {
+        method: "HEAD", credentials: "omit", redirect: "follow", signal: controller.signal
+      });
+    } catch { /* Some download endpoints do not support HEAD. */ }
+    if (head?.ok && isPdfResponseType(head.headers.get("content-type"))) return true;
+    if (head?.ok && /text\/html/i.test(head.headers.get("content-type") || "")) return false;
+    if (head && !head.ok && ![405, 501].includes(head.status)) return false;
+    // Fetch only a small header window if HEAD is unsupported or inconclusive.
+    // If the server ignores Range, cancel the reader after the first chunk.
     const response = await fetcher(raw, {
-      method: "HEAD",
+      method: "GET",
+      headers: { Range: "bytes=0-4095" },
       credentials: "omit",
       redirect: "follow",
       signal: controller.signal
     });
-    return response.ok && isPdfResponseType(response.headers.get("content-type"));
+    if (!response.ok) return false;
+    const reader = response.body?.getReader();
+    if (!reader) return false;
+    try {
+      const { value } = await reader.read();
+      if (!value) return false;
+      const prefix = new TextDecoder("ascii").decode(value.subarray(0, 1024));
+      return prefix.includes("%PDF-");
+    } finally { await reader.cancel().catch(() => undefined); reader.releaseLock(); }
   } catch {
     return false;
-  } finally {
-    clearTimeout(timer);
-  }
+  } finally { clearTimeout(timer); }
 }
