@@ -297,9 +297,12 @@ function renderPaperState(): void {
 }
 
 function resetPaper(): void {
-  paper = null; digest = null; conversation = []; cardText.value = "";
+  paper = null; digest = null; conversation = [];
+  cardText.value = "";
+  askInput.value = "";
   overviewContent.replaceChildren();
   renderOverview(); renderChat(); renderPaperState();
+  checkpointWorkspace();
 }
 
 function makeCard(title: string, text: string | string[], lead = false): HTMLElement {
@@ -422,26 +425,44 @@ async function inspectPage(tabId: number): Promise<string[]> {
 
 /** Automatically scans current tab and DOM; explicit Detect may also use HEAD. */
 async function refreshActiveTab(thorough = false, rescan = false): Promise<void> {
-  // Multiple tab events can arrive while a PDF DOM scan, permissions request
-  // or HEAD probe is still in flight. Only the newest result may modify UI.
+  // Ignore previous asynchronous tab scans when the user changes tabs or chooses a file.
   const generation = ++scanGeneration;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (generation !== scanGeneration) return;
   const url = tabIdentity(tab?.url);
   const id = tab?.id;
   const changed = id !== activeTabId || url !== tabUrl;
+
   if (changed) {
-    const samePdf = !!paper &&
-      (candidatePdfUrl(url) === paper.sourceUrl || url === paper.sourceUrl);
+    // Preserve the outgoing workspace *before* replacing active tab identity.
+    if (draftSaveTimer) clearTimeout(draftSaveTimer);
+    checkpointWorkspace();
     activeTabId = id;
     tabUrl = url;
     showStatus("");
-    if (!samePdf) {
-      activePdfUrl = candidatePdfUrl(url);
-      candidates = [];
-      scanPerformed = false;
-      filePermissionBlocked = false;
-      if (paper) resetPaper();
+    if (id !== undefined) {
+      const restored = await workspaces.open(id, url);
+      if (generation !== scanGeneration) return;
+      restoreWorkspace(restored);
+    } else {
+      // No user tab: show a neutral empty state, never another paper's content.
+      restoringWorkspace = true;
+      try {
+        activePdfUrl = null;
+        candidates = [];
+        scanPerformed = false;
+        paper = null;
+        digest = null;
+        conversation = [];
+        askInput.value = "";
+        cardText.value = "";
+        lastReadingView = "overview";
+        renderOverview();
+        renderChat();
+        setView("overview");
+      } finally {
+        restoringWorkspace = false;
+      }
     }
   }
 
@@ -451,17 +472,16 @@ async function refreshActiveTab(thorough = false, rescan = false): Promise<void>
   if (!stillCurrent()) return;
   filePermissionBlocked = !!activePdfUrl?.startsWith("file:") && !allowed;
 
-  if (id !== undefined && !filePermissionBlocked && (changed || thorough || rescan)) {
+  if (id !== undefined && !filePermissionBlocked && (changed || thorough || rescan) && !paper) {
     let found = await inspectPage(id);
     if (!stillCurrent()) return;
     if (!found.length && thorough && url.startsWith("https:")) {
       try {
-        // Only explicit Detect requests for additional host permission.
         const access = await requestHostAccess(url);
         if (!stillCurrent()) return;
         if (access) found = await inspectPage(id);
         if (!stillCurrent()) return;
-      } catch { /* Manual source fallback stays available. */ }
+      } catch { /* Manual source selection stays available. */ }
     }
     if (!activePdfUrl && found.length === 1) {
       activePdfUrl = found[0];
@@ -471,25 +491,28 @@ async function refreshActiveTab(thorough = false, rescan = false): Promise<void>
     }
   }
 
-  if (thorough && !activePdfUrl && candidates.length < 2 && url.startsWith("https:")) {
+  if (thorough && !paper && !activePdfUrl && candidates.length < 2 && url.startsWith("https:")) {
     try {
       const access = await requestHostAccess(url);
       if (!stillCurrent()) return;
       if (access) {
-        const isPdf = await probePdfContentType(url);
+        const pdf = await probePdfContentType(url);
         if (!stillCurrent()) return;
-        if (isPdf) activePdfUrl = url;
+        if (pdf) activePdfUrl = url;
       }
-    } catch { /* A protected/non-PDF URL is not a fatal error. */ }
+    } catch { /* Not a directly accessible PDF. */ }
   }
   if (!stillCurrent()) return;
   if (thorough) scanPerformed = true;
   renderSourceChooser();
   renderOverview();
   renderPaperState();
+  checkpointWorkspace();
   if (thorough) {
     if (filePermissionBlocked) showStatus("需要启用“允许访问文件网址”后才能读取本地 PDF。", true);
-    else if (activePdfUrl) showStatus("已找到 PDF。可以点击“分析”开始阅读。");
+    else if (paper || activePdfUrl) showStatus(paper
+      ? "已恢复当前论文，可以继续提问或查看卡片。"
+      : "已找到 PDF。可以点击“分析”开始阅读。");
     else if (candidates.length > 1) showStatus("找到 " + candidates.length + " 个候选 PDF，请选择。");
     else showStatus("未找到可直接获取的 PDF，可粘贴链接或选择本地文件。", true);
   }
@@ -512,6 +535,7 @@ function usePdfSource(url: string): void {
   filePermissionBlocked = false;
   scanPerformed = true;
   renderSourceChooser(); renderPaperState(); renderOverview();
+  checkpointWorkspace();
   showStatus("已选择 PDF。点击“分析”读取正文。");
 }
 
