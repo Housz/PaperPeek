@@ -15,7 +15,7 @@ describe("single-header reader UI contract", () => {
     const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);
     expect(new Set(ids).size).toBe(ids.length);
     for (const id of [
-      "paperTitle", "paperState", "analyzeBtn", "detectBtn", "uploadBtn",
+      "paperTitle", "paperState", "modelStatus", "analyzeBtn", "detectBtn", "uploadBtn",
       "fileInput", "sourceChooser", "sourceSelect", "sourceChooseBtn",
       "pasteUrlInput", "pasteUrlForm", "fileAccessHint", "fileAccessBtn",
       "overviewEmpty", "overviewContent", "chatHistory", "promptSuggestions",
@@ -28,6 +28,7 @@ describe("single-header reader UI contract", () => {
     expect(html).toContain('aria-label="重新检测当前页面的 PDF"');
     expect(html).toContain('aria-label="选择本地 PDF"');
     expect(html).toContain('aria-label="模型设置"');
+    expect(html).toContain('aria-label="当前 AI 模型"');
     expect(html).toContain('data-icon="settings"');
     expect(html).toContain('id="rememberInput"');
     expect(html).toContain("关闭后仍可使用");
