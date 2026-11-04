@@ -4,11 +4,12 @@ This file is the **entry point for coding agents and new maintainers**. Read it 
 
 ## Mission and frozen scope
 
-Version v0.1.3 is a **single current-PDF** reading helper with structure-focused summaries, Q&A, a short reusable Markdown Paper Card, and local BYOK provider settings. Public arXiv and permissioned local/public PDF sources first. No backend, no user accounts, no paper library, no external integrations, no automatic publication or notebook sync.
+Version v0.1.4 is a **single current-PDF** reading helper with structure-focused summaries, Q&A, a short reusable Markdown Paper Card, and local BYOK provider settings. Public arXiv and permissioned local/public PDF sources first. No backend, no user accounts, no paper library, no external integrations, no automatic publication or notebook sync.
 
 ## Read order
 
 1. `docs/requirements.md` — accepted behavior and out-of-scope items
+   - `docs/tab-sessions.md`: per-tab data lifetime, async results and cleanup
    - `docs/pdf-support.md`: URL/file/HTML detection, permission boundaries, unsupported sources
    - `docs/prompts.md`: versioned bilingual research prompt contracts and evals
 2. `docs/architecture.md` — modules and trust boundaries
@@ -31,6 +32,7 @@ Version v0.1.3 is a **single current-PDF** reading helper with structure-focused
 - `src/lib/digest.ts` schema validation and quote/page verification
 - `src/lib/markdown.ts` deterministic Markdown export
 - `src/lib/storage.ts` per-provider BYOK profiles, opt-in persistent keys, legacy migration
+- `src/lib/tab-workspace.ts` compressed per-tab ephemeral research state; must never contain API keys
 - `tests/` deterministic unit tests; no real API credentials
 - `.github/workflows/ci.yml` checks and packaged extension build
 
@@ -43,7 +45,7 @@ Version v0.1.3 is a **single current-PDF** reading helper with structure-focused
 5. **No fabricated citations.** Verified findings require an exact normalized quote on the claimed PDF page. Other page hints must be labeled unverified.
 6. **No hidden archive.** Store only settings and intentional key persistence; keep paper sessions transient.
 7. **Never imply PDF.js viewer/highlighting or OCR already works** in this version. It is on the roadmap.
-8. **At most current paper.** Switching tabs must not send an earlier paper to the model.
+8. **One paper per tab.** Each open Chrome tab has its own temporary research session. Switching/reopening Side Panel must not lose completed work or leak it into another tab; close-tab cleanup is mandatory. Switching tabs must not send an earlier paper to the model.
 
 ## Workflow
 
@@ -64,3 +66,7 @@ Write an ADR in `docs/decisions/` for migration to MIME Handler, PDF.js viewer, 
 - Updating provider settings requires per-provider key isolation, session vs local retention, legacy migration and official GET /models mock tests.
 - Updating prompt templates requires bilingual first mention and evidence abstention checks; bump PROMPT_LIBRARY_VERSION on substantive changes.
 - Use `docs/verification.md` to distinguish CI green from manually verified publisher/Chrome behavior.
+
+## v0.1.4 handoff note
+
+Run `tests/tab-workspace.test.ts` and `tests/reader-flows.test.ts` after modifying tab activation, state snapshots, async model tasks, model selection, PDF citation navigation, or Side Panel reopening. The workspaces live in `chrome.storage.session` and are cleared on browser restart/extension reload; do not silently turn them into an archival local database. Verify no API credentials enter the workspace snapshot. Follow `docs/tab-sessions.md`.
