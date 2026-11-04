@@ -72,3 +72,16 @@ Follow [testing.md](testing.md), especially M01–M15, on desktop Chrome. Use an
 **Environment blocker:** the isolated automated browser environment did not successfully register a locally loaded unpacked extension service worker; thus live Chrome extension, local-file, and provider tests were not completed. Headless `page.set_content` screenshots only validate markup/style, not Chrome APIs.
 
 **Release decision:** v0.1.3 remains an experimental MVP suitable for owner-run Chrome smoke tests, not a blanket guarantee for publisher or restricted PDFs. Follow [PDF support matrix](pdf-support.md), [test matrix](testing.md), and [Prompt evaluation plan](prompts.md). Never attach credentials or proprietary PDFs to tickets.
+
+
+## v0.1.3 follow-up verification — 2026-11-04
+
+- **[CI run 41759810505](https://github.com/Housz/PaperPeek/actions/runs/41759810505): PASS**. Strict TypeScript, **8 test files / 34 passing tests**, Vite build, packaged manifest/service-worker checks and upload of `paperpeek-v0.1.3-unpacked`.
+- Fixed an async race in `refreshActiveTab()`: a generation token now rejects late scans after another tab event or an explicit user source selection. Source detection for icon-only/aria-labeled PDF links now has a DOM-mocked regression test.
+- Verified archive contents include `manifest.json`, `sidepanel.html`, `assets/background.js`, bundled JS/CSS and the local PDF.js Worker. ZIP is the unpacked developer-extension artifact; it is **not a signed Chrome Web Store release**.
+- Attempted a real extension session in isolated Chromium using the unpacked ZIP and Playwright persistent context. Chromium launched but reported **zero registered extension service workers**, so no reliable extension-origin UI or file-scheme test could be completed in this environment.
+- Documentation fix: the original v0.1.3 Markdown docs had escaped backticks in several files; restored standard fenced code blocks and inline code so GitHub renders them correctly.
+
+**Still awaiting genuine desktop Chrome acceptance:** toggle file URL access off/on and read the currently opened local PDF without a file picker; test several public non-arXiv publisher URLs (including downloads that redirect to CDNs); verify real OpenAI/DeepSeek model catalog requests and persisted BYOK key after restart; validate page navigation and multi-PDF choice; expert-check terminology and source accuracy of the prompts.
+
+The automated test counts above do **not** certify those browser/provider workflows. Continue to call v0.1.3 an **experimental MVP** until the owner records actual pass/fail evidence using the matrix in `docs/testing.md`.
