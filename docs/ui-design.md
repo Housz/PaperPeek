@@ -1,55 +1,45 @@
-# PaperPeek interaction design — v0.1.2
+# Interaction design — PaperPeek v0.1.3
 
-**Status:** Implemented compact reader UI. See [design system](design-system.md) for tokens and component contract.
+**Status:** implemented, manual Chrome verification pending.
 
-## User mental model
+## User workflow
 
-The user has **one open PDF** and needs a quick decision. Avoid asking them to learn a feature taxonomy. The order is:
+1. User opens any PDF or an HTML page containing PDF links.
+2. A **single topbar** shows the current source, re-detection, local upload, Analyze and settings. Re-detection is always available.
+3. If no direct PDF is recognized, PaperPeek inspects page links/embeds; explicit re-detection may inspect response MIME/signature. If several candidates, user chooses one; manual URL/file is the fallback.
+4. If viewing a local `file://` PDF without permission, display "allow file URLs" instructions and link to extension details.
+5. First use: select provider and configure API Key; official OpenAI/DeepSeek model options fetched from their own API; custom ID remains available. Gemini is manual for this iteration.
+6. Overview presents research problem, approach, evidence-backed findings and limitations.
+7. Ask: free-form question or choose from six scientific prompt presets; bilingual terminology is used on first occurrence where feasible.
+8. Card: copy/download a concise Markdown digest.
 
-1. **Which paper?** Detect current arXiv/PDF and show the source in a compact strip. If none, show a single contextual empty state.
-2. **What next?** Analyze when model is configured, otherwise configure API Key. Do not hide prerequisites behind error messages.
-3. **What did the paper actually say?** Overview presents TL;DR, problem, approach, findings with checked source links, limitations and keywords.
-4. **What don't I understand?** Ask directly, optionally with one of four small starter questions (no standalone Explain tab).
-5. **What should I keep?** Card provides a compact Markdown summary with Copy/Save. It is not a notes library.
+## Primary information hierarchy
 
-## Navigation and layout
+One header (~65px), three tabs (Overview, Ask, Card), task content. No second paper bar. Settings is a utility page with explicit Back, not a fourth tab. Source chooser and paste-link fallback appear only when relevant. Paper content should occupy the majority of the narrow sidebar.
 
-Header: **PaperPeek** + Settings (utility icon). A document strip appears only when PDF is known and hides while Settings is open. Main navigation: **概览 | 提问 | 卡片**. Settings is a separate view with an explicit **返回阅读** action.
+## Honest states
 
-### Removed from v0.1.1
-
-- Dark gradients, teal glow, decorative logos/version badge and GitHub footer.
-- Feature-card grid and standalone Explain tab: explanation is a question type, not a separate destination.
-- Five-item tab row, large boxed overview sections, repeated process tips.
-- Chatbot-style boxed assistant answers and unnecessary uppercase labels.
-
-### Kept
-
-All v0.1.1 core behaviors: public arXiv and manual PDF, provider selection/BYOK, analyzed digest, free-form Ask, concise Markdown copy/download, verified page-link and unverified-page disclaimers.
-
-## Interaction states
-
-| Context | UI response |
+| Scenario | Next action |
 |---|---|
-| No PDF | Show "从一篇论文开始" and primary "选择 PDF". Current-source strip hidden. |
-| Recognized PDF but no API Key | Source strip + "先连接你的模型"; Analyze label becomes "配置模型". |
-| Recognized PDF + key | Source strip with "分析论文"; empty state indicates next step without duplicating the CTA. |
-| Loading PDF or model | Disable conflicting actions and show compact status in live region. |
-| Digest ready | Overview immediately populated, no giant instruction panel. |
-| Chat | Prompt suggestions shown until first message, then hidden. Composer anchored to lower part of content view. |
-| Settings | Hide tab nav + source strip; explicit return to last reading tab. |
-| Invalid or unavailable source | Error state, manual file upload remains accessible. |
-| Verified evidence | Inline page link, explicitly matched page quote. |
-| Model page hint (unverified) | Linked navigational hint with tooltip warning, not a proof badge. |
+| No PDF recognized | Detect current page, upload PDF, or paste URL |
+| Multiple PDFs found | Choose correct link; do not guess |
+| Local file access disabled | Enable "Allow access to file URLs" in Chrome extension details |
+| URL recognized but API Key missing | Configure provider |
+| Paper present but not analyzed | Analyze in single header |
+| Summary ready | Read, follow verified page links, Ask or export |
+| Dynamic HTML / protected iframe | Manual URL/file fallback with clear limitations |
+| Model list unavailable | Keep current/custom ID, show failure reason and offer manual retry |
+| Key session-only | Warn about loss when browser session ends; opt-in to local persistence |
+| API model 404 | Explain unavailable model, advise refresh and retest |
 
-## Accessibility
+## Input/permission distinctions
 
-- Native buttons, labels and textareas; proper \`role=tablist/tab/tabpanel\` semantics, roving tab index and arrow navigation.
-- A descriptive accessible name for icon buttons.
-- Inline messages use \`aria-live=polite\`.
-- Keyboard focus remains visible; semantic \`hidden\` controls visibility.
-- No unsanitized HTML from PDF or models.
+- Page DOM inspection does not send model requests and does not collect arbitrary webpage content for archival.
+- Explicit Detect may make HEAD/short GET to the **current** website, after permission as necessary.
+- Analyze performs full PDF fetch and transmits extracted text to selected LLM only after user action.
+- Existing extension permission for another origin does not imply access to arbitrary private files.
+- Local file path is not included in generated AI prompts or Markdown card.
 
-## Next UX validation
+## Accessibility and QA
 
-Test real Chrome Side Panel in widths 300/360/450px, with 2-line titles, long model answers, failed requests, native PDF page navigation and light/dark system settings. Do not claim actual Chrome extension smoke is complete merely because Vite and mocked DOM checks pass.
+Three tabs with roving tabIndex; named icon actions; 2px keyboard focus; status live region; model picker can be operated by keyboard; buttons disabled during active long tasks. Check 300/360/450px, system dark mode and long Chinese model names, compare with [design system](design-system.md).

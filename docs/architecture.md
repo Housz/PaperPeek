@@ -1,61 +1,64 @@
-# Technical architecture — v0.1.1
+# PaperPeek technical architecture — v0.1.3
 
-**Approach:** Backend-free Chrome Manifest V3 Side Panel. PDF.js parses and extracts text in trusted extension UI; providers are called over HTTPS with the user's key. Browser-native PDF remains the main viewer.
+**Status:** code implemented, real website compatibility still under manual verification.
+
+## System
 
 ```mermaid
 flowchart TD
- Tab[Active public PDF tab] --> Resolve[URL + optional origin permission]
- File[Manual local PDF] --> Parser[PDF.js in Side Panel]
- Resolve --> Fetch[Size-limited PDF fetch] --> Parser
- Parser --> Paper[Transient Paper & pages]
- Paper --> Prompt[Overview or Ask prompt]
- Prompt --> Adapter[Provider Adapter]
- Settings[Session BYOK / opt-in local storage] --> Adapter
- Adapter --> API[Gemini / OpenAI / DeepSeek API]
- API --> Parser2[Structured digest / chat text]
- Parser2 --> Verify[Quote match within PDF page]
- Verify --> Overview[Overview & page navigation]
- Verify --> Markdown[Deterministic Paper Card Markdown]
- ```
-
-## Boundaries
-
-- `src/main.ts` owns active tab, ephemeral Paper/Digest/chat, DOM orchestration and user actions.
-- `src/background.ts` owns action opening and selection context menu, writing temporary selection to `chrome.storage.session`.
-- `lib/urls.ts` normalizes arXiv PDF/abstract links, screens unsupported URLs and builds PDF `#page=N` fragments.
-- `lib/document.ts` downloads at most **25 MiB**, sniffs PDF header, runs PDF.js locally, collects up to **125,000 characters** with explicit truncation.
-- `lib/prompts.ts` treats paper as data, sets output format and uses last six recent messages for follow-ups.
-- `lib/provider.ts` keeps three REST adapters and no provider SDK injection; 90s timeout, sanitized HTTP errors.
-- `lib/digest.ts` validates schema and verifies a finding's literal quote on the claimed page after whitespace normalization.
-- `lib/markdown.ts` deterministically serializes paper/digest; display and export share the same data.
-- `lib/storage.ts` stores provider/model in `storage.local`, key by default in `storage.session`, optional local key persistence.
-
-## Data model
-
-```text
-Paper { id, sourceUrl?, title, authors?, pages:[{page,text}], totalPages, truncated }
-Digest { tldr, problem, approach:[], findings:[{text,page?,quote?,verified}], limitations:[], keywords:[] }
-ChatMessage { role:'user'|'assistant', text }
-Settings { provider, model, rememberKey } + key (trusted extension context only)
+    Tab[Active Chrome tab: HTTPS, arXiv, file://] --> URL[URL recognition]
+    Tab --> DOM[On-demand accessible HTML PDF link/iframe scan]
+    DOM --> Choose{One or many?}
+    Choose --> Source[Chosen PDF URL]
+    URL --> Source
+    Tab --> Probe[Explicit Detect: HEAD MIME / small Range GET signature]
+    Probe --> Source
+    File[Explicit local file picker] --> Parse[PDF.js in trusted Side Panel]
+    Source --> Permission[Host / file permission gates]
+    Permission --> Fetch[PDF download <=25MB]
+    Fetch --> Parse
+    Parse --> Paper[Transient page-indexed document]
+    Paper --> Prompt[Versioned scholarly prompts]
+    Settings[Per-provider BYOK profile] --> Catalog[Official models list / custom ID]
+    Catalog --> Provider[OpenAI / DeepSeek / Gemini adapter]
+    Prompt --> Provider
+    Provider --> Digest[Structured JSON digest / Q&A]
+    Digest --> Verify[Quote/page literal verification]
+    Verify --> Overview[Overview + source page link]
+    Verify --> MD[Deterministic Markdown card]
 ```
 
-Page is the **PDF physical page index starting at 1**, not printed journal pagination. Native Chrome PDF's `#page=N` is best-effort page navigation, not a precise highlight API.
+## Source access / privacy boundary
 
-## Trust and consent
+`lib/urls.ts`: direct URL/source heuristics and safe scheme gates. `lib/detection.ts`: inject-able self-contained HTML discovery function, candidate normalization, MIME+bounded signature probe. `main.ts`: tab/source choice/permission state, explicit user actions and PDF lifecycle. `document.ts`: bounded fetch and PDF.js text extraction; parsing may not preserve complex reading order.
 
-- User clicks Analyze to fetch PDF and make provider request; credentials are not included in PDF download.
-- HTTPS API requests go to fixed, manifest-declared official endpoints. No arbitrary user-defined remote endpoint in this release.
-- Model/PDF output goes to `textContent` or textarea; never `innerHTML`.
-- Model-generated `page`/ `quote` is *candidate evidence*. Only quotes found on that extracted page enable verified navigation.
-- Chat answer page hints are explicitly unverified.
-- Third-party model processes transmitted PDF text under its own data terms; PaperPeek does not proxy, log or store papers in a server.
+- URL and HTML discovery are **not LLM uploads**.
+- Explicit Detect may request access to the current website and send HEAD / Range GET only to that site. Analyze fetches the selected PDF in full. Source protocol restricted to HTTPS or an explicitly authorized local file.
+- File reading requires Chrome's file URL access toggle; no local path in prompt/export.
+- Unknown/protected embedded PDF, POST-only response, blob URL and SSO may be impossible to re-fetch without viewer takeover; do not falsely claim otherwise.
+- Avoid broad `webRequest` observation and auto-discovery of every browsed site in the background. Chrome 151+ MIME Handler remains a separately approved future option.
 
-## Known technical debt
+## Model/settings
 
-The PDF extraction currently follows PDF.js item order; complex two-column reading order and math may degrade quality. Text-based prompts are bounded, not retrieval-augmented. Direct API access can fail if keys, quotas, policies or model IDs differ. UI is one entry point for now; extract state/controller modules as complexity grows.
+`lib/provider.ts` calls official fixed HTTPS API endpoints. `GET /models` for OpenAI/DeepSeek returns candidate model IDs; OpenAI uses a heuristic to hide obviously non-chat models but catalog membership does **not** guarantee Chat Completions compatibility. Selected model ID is sent in each generation request. For Gemini the existing manual model ID route is unchanged.
 
-## Extension build
+`lib/storage.ts` stores a v2 selected provider + independent per-provider model/persist preferences in Chrome local storage. Keys are in per-provider session storage by default; the optional persisted map is local-only. One-time migration reads old `paperpeek.settings` and old key for **that provider only**, then deletes legacy entries. Clear-key operates per provider. No backend or PaperPeek account.
 
-Vite bundles `sidepanel.html` and `src/background.ts`, with fixed `assets/background.js` service-worker path. Static `public/manifest.json` is copied to `dist/manifest.json`. PDF.js worker is bundled from `pdfjs-dist/...worker...mjs?url` as a local asset to comply with MV3 no-remote-code policy.
+## Scientific prompts and data
 
-See ADR and Testing for why no MIME interception or PDF.js replacement viewer yet.
+`lib/prompts.ts`: versioned first-party prompt registry, shared bilingual terminology + source fidelity instructions, structured overview, bounded-history Q&A. The paper appears as explicitly marked **untrusted input**. Local file paths are omitted. `lib/digest.ts` only verifies an exact normalized quote on a claimed physical PDF page; semantic correctness still requires researcher review. `lib/markdown.ts` exports the same digest to a portable MD.
+
+**Known performance limits:** 25 MiB max fetched PDF, 125k text characters for model context, 90s model timeout, non-streaming response, no RAG/OCR, no image-based figure explanation yet.
+
+## UI / modules
+
+- `sidepanel.html` and `src/styles.css` define a single compact source+action header; Overview/Ask/Card tab views.
+- `src/main.ts` owns DOM + ephemeral paper/chat state and selected-source navigation.
+- `src/background.ts` opens Side Panel and optionally passes context-menu text through session storage.
+- `src/types.ts` supplies provider, paper and digest types.
+
+See [Design System](design-system.md), [PDF support](pdf-support.md), [Prompt library](prompts.md), [Security](security.md) and [Testing](testing.md).
+
+## Change contract
+
+Changes to source discovery must update tests for file scheme, dynamic URLs, multi-PDF candidates and permissions. Changes to provider model lists must update tests and model compatibility caveats. Changes to prompt templates should bump `PROMPT_LIBRARY_VERSION` and be evaluated with human-reviewed papers, not just structural tests.

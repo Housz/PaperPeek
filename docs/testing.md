@@ -1,4 +1,4 @@
-# Test plan — v0.1.2
+# Test plan — v0.1.3
 
 **Test strategy:** deterministic unit tests in CI + real Chrome/PDF/provider manual smoke. Do not infer successful production behavior from mocked tests.
 
@@ -12,7 +12,7 @@
 
 CI runs TypeScript check, unit tests and bundle build; publishes `dist` artifact.
 
-## UI acceptance (v0.1.2)
+## UI acceptance (v0.1.3)
 
 Check at 300 / 360 / 450px sidebar width, light and OS-dark modes: source strip is compact and hidden when no PDF or while Settings is open; only Overview / Ask / Card are main tabs; explanation quick questions live in Ask; Settings back restores last reading tab; empty-state actions reflect PDF+BYOK readiness; keyboard arrow keys navigate tabs; paper text, page links, chat and Markdown do not clip horizontally.
 
@@ -47,3 +47,24 @@ The unit suite deliberately uses only dummy credentials and mocked responses. Ac
 ## Regression checks
 
 Every new Chrome permission, PDF fetch strategy, prompt field, provider adapter or Markdown field needs corresponding tests and user guide update.
+
+## v0.1.3 focused regression matrix
+
+| ID | Case | Expected |
+|---|---|---|
+| P01 | file:// PDF, file access disabled | Permission guidance and usable file picker |
+| P02 | file:// PDF, permission enabled | PDF detected and parsed without picker |
+| P03 | Public HTML containing one iframe/embed PDF | Source auto-discovered without model upload |
+| P04 | HTML page with several PDF links | Candidate selector; no silent choice |
+| P05 | Dynamic HTTPS PDF without suffix | Explicit HEAD/MIME or bounded GET signature identifies PDF |
+| P06 | Non-PDF HTML URL | No false-positive PDF status; manual fallback visible |
+| P07 | Publisher login / blob / POST-only PDF | Honest failure; allow user-chosen downloaded PDF |
+| S01 | Save OpenAI key, switch to DeepSeek | Different keys/models; no cross-provider leakage |
+| S02 | Opt-in saved key + browser restart | Local key persists; session-only key expires |
+| S03 | Clear one provider key | Other provider secrets remain untouched |
+| S04 | Refresh DeepSeek/OpenAI model catalog | GET official endpoint, safe error, custom model fallback |
+| R01 | Prompt: method/experiments/formula/terms | First mention Chinese (English) and no invented details |
+| R02 | Source contains local path or instruction injection | No local file path in prompt, no execution or obedience to PDF instructions |
+| U01 | Side Panel 300/360/450px | Single header, no overflow, 14px reading text, keyboard controls |
+
+Do not interpret mocked tests as successful compatibility tests against publishers or actual browser file access.

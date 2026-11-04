@@ -1,6 +1,6 @@
 # Roadmap and open questions
 
-## Shipped target: v0.1.1
+## Shipped target: v0.1.1–v0.1.3 (subject to real-browser smoke)
 
 Chrome Side Panel; single public arXiv or locally picked PDF; local PDF.js text extraction; Gemini/OpenAI/DeepSeek BYOK; overview, explain starters, Q&A, quote-verified findings, page links; Markdown card. No backend.
 
@@ -27,3 +27,11 @@ Multi-paper corpus, remote database, Zotero/Obsidian/GitHub integration, shared 
 ## Decision criteria
 
 Prioritize success rate on real arXiv PDFs, user time-to-understanding, quote verification accuracy, export portability and cost transparency. Do not introduce expensive new infrastructure without usage evidence.
+
+## v0.1.3 known follow-ups
+
+- Real browser/manual publisher matrix, cookie-protected PDF fallback and redirects to CDN hosts.
+- Improve detection of cross-origin frames, `blob:` documents and POST/signed PDFs through explicit opt-in reader/MIME Handler design (requires Chrome 151+ and architecture approval).
+- PDF selection and precision highlight in controlled PDF.js viewer, rather than Chrome native internals.
+- Model capability validation beyond heuristics (official list is not a definitive Chat Completions compatibility flag).
+- Human-reviewed prompt evaluation, bilingual glossary consistency and hallucination metrics.

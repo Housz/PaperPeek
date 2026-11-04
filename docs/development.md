@@ -35,3 +35,10 @@ For each PR: update requirements for behavior, architecture/ADR for trade-offs, 
 ## Versioning
 
 Patch for bugs and docs; minor for new reading/export feature; release notes must distinguish shipped vs planned capabilities.
+
+## New modules v0.1.3
+
+- The detection logic lives in `src/lib/urls.ts` and `src/lib/detection.ts`; keep injected DOM function self-contained (Chrome serializes it into isolated world).
+- Provider metadata discovery is in `src/lib/provider.ts`; only fixed official endpoints and sanitized errors.
+- Key persistence is per provider in `src/lib/storage.ts`; never revert to one shared key.
+- Scientific prompt templates are maintained in `src/lib/prompts.ts` and `docs/prompts.md`, with version bump and regression tests.

@@ -1,4 +1,4 @@
-# Requirements / PRD — PaperPeek v0.1.2
+# Requirements / PRD — PaperPeek v0.1.3
 
 **Status:** accepted initial scope. **Owner:** repository maintainer. **Last updated:** 2026-11-02. Change with a PR when behavior changes.
 
@@ -17,7 +17,7 @@ PaperPeek helps a scientist decide **whether to read** the PDF, understand resea
 
 ## Version boundaries
 
-**IN:** One current text-based PDF, public arXiv as main test, local PDF fallback, BYOK Gemini/OpenAI/DeepSeek, summary, Q&A, preset explanations, verified digest page references, page navigation, Markdown export.
+**IN:** One current text-based PDF, public arXiv plus accessible HTTPS and local file sources, local PDF fallback, BYOK Gemini/OpenAI/DeepSeek, summary, Q&A, preset explanations, verified digest page references, page navigation, Markdown export.
 
 **OUT:** Multi-paper research, permanent archive, Obsidian/Zotero/GitHub connection, profile/login/backend, scanning/OCR, automatic source discovery, precise text highlighting, annotated PDF, region screenshot, chart detection, automated novelty/quality ratings.
 
@@ -49,3 +49,13 @@ How many pages in a typical discipline? Should digest be auto-generated on PDF l
 ## Success signals
 
 Time to initial paper decision; answer correctness audited against PDF; ratio of verified digest evidence; public PDF load success; Markdown reuse without edits. Do not report invented benchmark scores.
+
+## v0.1.3 acceptance additions
+
+- Current file:///...pdf is recognized; without file permission, show access instructions instead of silently failing; manual picker still works.
+- One-header source controls are always available: detect, upload, analyze and settings; no second document toolbar.
+- HTML page PDF link/embed sources become candidates; on multiple candidates require user selection. Explicit detect can HEAD and bounded signature probe URL without .pdf extension.
+- Provider-specific model and key settings survive provider switches; local key persistence is explicit, per provider, and reversible.
+- GET official OpenAI/DeepSeek model catalog and custom ID fallback; model ID affects actual request, so show a test-generation action.
+- Versioned six-preset scientific prompt library; concise Overview requires Chinese (English) first mention and evidence/claims distinction.
+- Do not claim authenticated/blob/POST-only sources or real publisher compatibility until manually verified.
