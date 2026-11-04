@@ -548,99 +548,162 @@ function currentRequest(prompt: string, json = false) {
     prompt, json
   };
 }
-async function summarize(): Promise<void> {
-  if (!paper || busy) return;
-  const targetPaper = paper;
-  setBusy(true); showStatus("正在整理研究问题、方法与证据……");
+async function summarizePaper(tabId: number, targetPaper: Paper): Promise<void> {
+  if (pendingTabs.has(tabId) || !workspaces.get(tabId)) return;
+  setBusy(true, tabId);
+  if (isCurrentPaper(tabId, targetPaper.id))
+    showStatus("正在整理研究问题、方法与证据……");
   try {
-    const raw = await generateText(currentRequest(overviewPrompt(targetPaper), true));
-    // The tab may change while the provider request is in flight.
-    if (paper !== targetPaper) return;
-    const nextDigest = parseDigest(raw, targetPaper.pages);
-    digest = nextDigest;
-    cardText.value = toMarkdown(targetPaper, nextDigest);
-    renderOverview(); renderPaperState(); setView("overview");
-    showStatus(nextDigest.findings.some(f => !f.verified)
-      ? "分析完成。部分结论没有可验证的原文片段，请人工核查。"
-      : "论文分析完成。");
+    // Capture the request before awaiting; provider changes in another tab
+    // must not redirect a running job or mix paper content.
+    const request = currentRequest(overviewPrompt(targetPaper), true);
+    const raw = await generateText(request);
+    const next = parseDigest(raw, targetPaper.pages);
+    const updated = await updatePaperResult(tabId, targetPaper.id, ws => {
+      ws.digest = next;
+      ws.view = "overview";
+    });
+    if (updated && isCurrentPaper(tabId, targetPaper.id)) {
+      setView("overview");
+      showStatus(next.findings.some(f => !f.verified)
+        ? "分析完成。部分原文位置未验证，请人工核查。"
+        : "分析完成。");
+    }
   } catch (error) {
-    if (paper === targetPaper)
+    if (isCurrentPaper(tabId, targetPaper.id))
       showStatus(error instanceof Error ? error.message : "分析失败，请重试。", true);
-  } finally { setBusy(false); }
+  } finally {
+    setBusy(false, tabId);
+  }
 }
+
+async function summarize(): Promise<void> {
+  if (!paper || activeTabId === undefined) return;
+  await summarizePaper(activeTabId, paper);
+}
+
+/** Store a loaded PDF in the originating tab, even if another tab is now active. */
+async function acceptParsedPaper(
+  tabId: number, loaded: Paper, expectedSource: string | null
+): Promise<boolean> {
+  const target = workspaces.get(tabId);
+  if (!target || (expectedSource !== null && target.selectedPdfUrl !== expectedSource))
+    return false;
+  target.selectedPdfUrl = expectedSource;
+  target.paper = loaded;
+  target.digest = null;
+  target.conversation = [];
+  target.draft = "";
+  target.view = "overview";
+  await workspaces.save(target);
+  if (activeTabId === tabId && (expectedSource === null || activePdfUrl === expectedSource)) {
+    activePdfUrl = expectedSource;
+    paper = loaded;
+    digest = null;
+    conversation = [];
+    askInput.value = "";
+    cardText.value = "";
+    renderSourceChooser();
+    renderOverview();
+    renderChat();
+    renderPaperState();
+  }
+  return true;
+}
+
 async function analyzeCurrent(): Promise<void> {
-  if (busy) return;
+  if (busy || activeTabId === undefined) return;
+  const tabId = activeTabId;
   if (!credentials.apiKey.trim()) {
     setView("settings");
     showStatus("先配置当前服务商的 API Key。");
     return;
   }
-  if (paper) { await summarize(); return; }
-  if (!activePdfUrl) {
-    showStatus("尚未选择 PDF。请点击重新检测、选择链接或打开本地文件。", true);
+  if (paper) {
+    await summarize();
     return;
   }
-  const url = activePdfUrl;
-  const tabId = activeTabId;
-  try {
-    if (!(await requestHostAccess(url))) {
-      filePermissionBlocked = url.startsWith("file:");
-      renderOverview();
-      throw new Error(filePermissionBlocked
-        ? "请到 Chrome 扩展详情页打开“允许访问文件网址”，再重新分析。"
-        : "需要先授权该 PDF 网站的读取权限。");
-    }
-    setBusy(true);
-    showStatus("正在提取 PDF 正文…");
-    const bytes = await fetchPdf(url);
-    const loaded = await parsePdf(bytes, url);
-    if (url !== activePdfUrl || tabId !== activeTabId)
-      throw new Error("检测到标签页发生变化，请重新分析。");
-    paper = loaded; digest = null; conversation = [];
-    renderOverview(); renderChat(); renderPaperState();
-  } catch (error) {
-    showStatus(error instanceof Error ? error.message : "无法读取该 PDF。可以选择本地文件。", true);
+  if (!activePdfUrl) {
+    showStatus("尚未选择 PDF。请重新检测、粘贴链接或打开本地文件。", true);
     return;
-  } finally { setBusy(false); }
-  await summarize();
+  }
+  const source = activePdfUrl;
+  let loaded: Paper | null = null;
+  setBusy(true, tabId);
+  try {
+    if (!(await requestHostAccess(source))) {
+      if (activeTabId === tabId) {
+        filePermissionBlocked = source.startsWith("file:");
+        renderOverview();
+      }
+      throw new Error(source.startsWith("file:")
+        ? "请在 Chrome 扩展详情页启用“允许访问文件网址”，再重新分析。"
+        : "需要先授权当前 PDF 网站的读取权限。");
+    }
+    const target = workspaces.get(tabId);
+    if (!target || target.selectedPdfUrl !== source) return;
+    if (activeTabId === tabId) showStatus("正在提取 PDF 正文……");
+    const bytes = await fetchPdf(source);
+    loaded = await parsePdf(bytes, source);
+    if (!(await acceptParsedPaper(tabId, loaded, source))) loaded = null;
+  } catch (error) {
+    if (activeTabId === tabId)
+      showStatus(error instanceof Error ? error.message : "无法读取 PDF。可以尝试选择已下载文件。", true);
+  } finally {
+    setBusy(false, tabId);
+  }
+  if (loaded) await summarizePaper(tabId, loaded);
 }
 
 async function openLocal(file: File): Promise<void> {
-  if (busy) return;
+  if (busy || activeTabId === undefined) return;
   const tabId = activeTabId;
-  setBusy(true); showStatus("正在读取本地 PDF……");
+  let loaded: Paper | null = null;
+  setBusy(true, tabId);
+  if (activeTabId === tabId) showStatus("正在读取本地 PDF……");
   try {
-    const loaded = await parsePdf(await file.arrayBuffer(), null);
-    if (tabId !== activeTabId) return;
+    loaded = await parsePdf(await file.arrayBuffer(), null);
     if (!loaded.title || loaded.title === "Untitled paper")
       loaded.title = file.name.replace(/\.pdf$/i, "");
-    paper = loaded;
-    digest = null; conversation = [];
-    renderOverview(); renderChat(); renderPaperState();
-    showStatus("PDF 已加载。正在准备生成概览……");
+    if (!(await acceptParsedPaper(tabId, loaded, null))) loaded = null;
   } catch (error) {
-    if (tabId === activeTabId)
+    if (activeTabId === tabId)
       showStatus(error instanceof Error ? error.message : "本地 PDF 加载失败。", true);
-    return;
-  } finally { setBusy(false); }
-  await summarize();
+  } finally {
+    setBusy(false, tabId);
+  }
+  if (loaded) await summarizePaper(tabId, loaded);
 }
+
 async function ask(question: string): Promise<void> {
-  if (!paper || busy) { showStatus("请先分析或加载当前论文。", true); return; }
+  if (!paper || busy || activeTabId === undefined) {
+    showStatus("请先分析或加载当前论文。", true);
+    return;
+  }
+  const tabId = activeTabId;
   const targetPaper = paper;
   const history = conversation.slice(-6);
   conversation.push({ role: "user", text: question });
-  renderChat(); setView("ask"); setBusy(true); showStatus("正在基于当前论文回答……");
+  checkpointWorkspace();
+  renderChat();
+  setView("ask");
+  setBusy(true, tabId);
+  showStatus("正在基于当前论文回答……");
   try {
-    const answer = await generateText(currentRequest(askPrompt(targetPaper, question, history)));
-    if (paper !== targetPaper) return; // Never show a former paper's answer in another tab.
-    conversation.push({ role: "assistant", text: answer });
-    renderChat(); showStatus("");
+    const request = currentRequest(askPrompt(targetPaper, question, history));
+    const answer = await generateText(request);
+    const updated = await updatePaperResult(tabId, targetPaper.id, ws => {
+      ws.conversation.push({ role: "assistant", text: answer });
+    });
+    if (updated && isCurrentPaper(tabId, targetPaper.id)) showStatus("");
   } catch (error) {
-    if (paper === targetPaper)
+    if (isCurrentPaper(tabId, targetPaper.id))
       showStatus(error instanceof Error ? error.message : "提问失败。", true);
-  } finally { setBusy(false); }
+  } finally {
+    setBusy(false, tabId);
+  }
 }
+
 function selectedModel(): string {
   return modelSelect.value === "__custom__" ? modelInput.value.trim() : modelSelect.value;
 }
