@@ -68,6 +68,7 @@ let tabUrl = "";
 let activePdfUrl: string | null = null;
 let candidates: string[] = [];
 let scanPerformed = false;
+let scanGeneration = 0;
 let filePermissionBlocked = false;
 let paper: Paper | null = null;
 let digest: Digest | null = null;
@@ -332,14 +333,20 @@ async function inspectPage(tabId: number): Promise<string[]> {
 
 /** Automatically scans current tab and DOM; explicit Detect may also use HEAD. */
 async function refreshActiveTab(thorough = false, rescan = false): Promise<void> {
+  // Multiple tab events can arrive while a PDF DOM scan, permissions request
+  // or HEAD probe is still in flight. Only the newest result may modify UI.
+  const generation = ++scanGeneration;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (generation !== scanGeneration) return;
   const url = tabIdentity(tab?.url);
   const id = tab?.id;
   const changed = id !== activeTabId || url !== tabUrl;
   if (changed) {
-    const samePdf = !!paper && (candidatePdfUrl(url) === paper.sourceUrl || url === paper.sourceUrl);
+    const samePdf = !!paper &&
+      (candidatePdfUrl(url) === paper.sourceUrl || url === paper.sourceUrl);
     activeTabId = id;
     tabUrl = url;
+    showStatus("");
     if (!samePdf) {
       activePdfUrl = candidatePdfUrl(url);
       candidates = [];
@@ -348,15 +355,24 @@ async function refreshActiveTab(thorough = false, rescan = false): Promise<void>
       if (paper) resetPaper();
     }
   }
-  filePermissionBlocked = !!activePdfUrl?.startsWith("file:") && !(await fileAccessAllowed());
+
+  const stillCurrent = () =>
+    generation === scanGeneration && activeTabId === id && tabUrl === url;
+  const allowed = await fileAccessAllowed();
+  if (!stillCurrent()) return;
+  filePermissionBlocked = !!activePdfUrl?.startsWith("file:") && !allowed;
+
   if (id !== undefined && !filePermissionBlocked && (changed || thorough || rescan)) {
-    // One script attempt without prompting; PDF native viewer may reject it.
     let found = await inspectPage(id);
+    if (!stillCurrent()) return;
     if (!found.length && thorough && url.startsWith("https:")) {
       try {
-        // User-triggered retry can ask for current page's host access.
-        if (await requestHostAccess(url)) found = await inspectPage(id);
-      } catch { /* Manual URL/file fallback remains available. */ }
+        // Only explicit Detect requests for additional host permission.
+        const access = await requestHostAccess(url);
+        if (!stillCurrent()) return;
+        if (access) found = await inspectPage(id);
+        if (!stillCurrent()) return;
+      } catch { /* Manual source fallback stays available. */ }
     }
     if (!activePdfUrl && found.length === 1) {
       activePdfUrl = found[0];
@@ -365,14 +381,23 @@ async function refreshActiveTab(thorough = false, rescan = false): Promise<void>
       candidates = found;
     }
   }
+
   if (thorough && !activePdfUrl && candidates.length < 2 && url.startsWith("https:")) {
     try {
-      if (await requestHostAccess(url) && await probePdfContentType(url))
-        activePdfUrl = url;
-    } catch { /* Not a directly accessible PDF. */ }
+      const access = await requestHostAccess(url);
+      if (!stillCurrent()) return;
+      if (access) {
+        const isPdf = await probePdfContentType(url);
+        if (!stillCurrent()) return;
+        if (isPdf) activePdfUrl = url;
+      }
+    } catch { /* A protected/non-PDF URL is not a fatal error. */ }
   }
+  if (!stillCurrent()) return;
   if (thorough) scanPerformed = true;
-  renderSourceChooser(); renderOverview(); renderPaperState();
+  renderSourceChooser();
+  renderOverview();
+  renderPaperState();
   if (thorough) {
     if (filePermissionBlocked) showStatus("需要启用“允许访问文件网址”后才能读取本地 PDF。", true);
     else if (activePdfUrl) showStatus("已找到 PDF。可以点击“分析”开始阅读。");
@@ -382,7 +407,13 @@ async function refreshActiveTab(thorough = false, rescan = false): Promise<void>
 }
 
 function usePdfSource(url: string): void {
-  if (!allowedPdfSource(url)) { showStatus("仅支持 HTTPS 或已授权的本地 PDF 地址。", true); return; }
+  if (!allowedPdfSource(url) ||
+      (url.startsWith("file:") && !candidatePdfUrl(url))) {
+    showStatus("仅支持 HTTPS PDF 地址或以 .pdf 结尾的本地文件。", true);
+    return;
+  }
+  // An earlier asynchronous scan must not replace the explicit user choice.
+  scanGeneration++;
   const parsed = new URL(url);
   parsed.hash = "";
   const next = parsed.href;
