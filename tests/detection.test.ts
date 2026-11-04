@@ -1,9 +1,33 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  isPdfResponseType, probePdfContentType, sanitizeDetectedCandidates
+  collectDocumentCandidates, isPdfResponseType, probePdfContentType, sanitizeDetectedCandidates
 } from "../src/lib/detection";
 
+afterEach(() => vi.unstubAllGlobals());
+
 describe("on-demand PDF detection", () => {
+  it("reads ordinary publisher DOM embeds and aria-labeled PDF links without fetching", () => {
+    class TestObject { data = "https://publisher.org/download?id=2";
+      getAttribute(name: string) { return name === "type" ? "application/pdf" : null; }
+    }
+    vi.stubGlobal("HTMLObjectElement", TestObject);
+    const object = new TestObject();
+    const anchor = {
+      href: "https://publisher.org/getfile?id=3",
+      textContent: "   ",
+      getAttribute(name: string) { return name === "aria-label" ? "Download PDF" : null; }
+    };
+    vi.stubGlobal("document", {
+      baseURI: "https://publisher.org/article/1", contentType: "text/html",
+      querySelectorAll(selector: string) {
+        return selector.startsWith("iframe") ? [object] : [anchor];
+      }
+    });
+    vi.stubGlobal("location", { href: "https://publisher.org/article/1" });
+    expect(collectDocumentCandidates()).toEqual([
+      "https://publisher.org/download?id=2", "https://publisher.org/getfile?id=3"
+    ]);
+  });
   it("recognizes application/pdf and optional parameters", () => {
     expect(isPdfResponseType("application/pdf")).toBe(true);
     expect(isPdfResponseType("application/pdf; charset=binary")).toBe(true);
