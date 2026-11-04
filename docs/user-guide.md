@@ -1,19 +1,20 @@
-# PaperPeek user guide — v0.1.3
+# PaperPeek user guide — v0.1.4
 
 **Chrome 116+ · single research PDF · no PaperPeek backend.** Experimental extension; test with public materials first.
 
-## Install
+## Install from GitHub Releases (recommended)
 
-Node.js 22.12+ and npm:
+1. Open [PaperPeek Releases](https://github.com/Housz/PaperPeek/releases) and select **v0.1.4**.
+2. Under **Assets**, download `PaperPeek-v0.1.4-chrome.zip`. **Do not use the auto-generated GitHub Source code ZIP**, which is not the built extension.
+3. Unzip into a stable local folder. The folder you select must directly contain `manifest.json`.
+4. In Chrome open `chrome://extensions`, enable Developer mode → **Load unpacked** → select that folder.
+5. Configure your own AI API Key in PaperPeek Settings.
 
-```bash
-npm install
-npm run check
-npm test
-npm run build
-```
+Optional: download `SHA256SUMS.txt` from the same Release to verify the archive.
 
-In Chrome open `chrome://extensions`, enable Developer mode → Load unpacked → select `dist/`.
+**Updating an existing installation:** replace files within the same unpacked directory and click Reload in `chrome://extensions`. Avoid removing the extension first, since reinstallation into a different directory can change the extension identity and local settings. Save important Markdown before Reload: completed paper sessions are intentionally temporary and may be cleared.
+
+To build from source (developers only): Node.js 22.12+, `npm install && npm run check && npm test && npm run build`, then load the generated `dist/` folder. See [Release process](releasing.md).
 
 ## Quick start
 
@@ -24,6 +25,8 @@ In Chrome open `chrome://extensions`, enable Developer mode → Load unpacked �
 5. Open Settings → choose DeepSeek / OpenAI → enter API Key → click **刷新官方列表** to fetch model options; select model and **测试模型**. The chosen ID is used directly in the API call. There is a **手动填写模型 ID** option for models absent from the list.
 6. **保存设置** to apply. For API Key reuse after browser restart, check **在此设备保存 Key（关闭后仍可使用）**. This is *opt-in* and local storage is not an encrypted vault.
 7. Click **分析**. Read Overview; ask questions or choose research prompt presets; copy/download Card as `.md`.
+
+The compact top status displays the **current provider and exact model ID used for new requests** (for example, `DeepSeek · deepseek-flash`). Hover over the truncated label on narrow Side Panels to see the full ID. This is the *current configuration*, not a retrospective claim about which model generated earlier answers.
 
 ## Read the PDF already opened locally (`file://`)
 
