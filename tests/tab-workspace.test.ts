@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Digest, Paper } from "../src/types";
 import {
-  blankWorkspace, documentIdentity, loadTabWorkspace, packWorkspace,
+  blankWorkspace, documentIdentity, loadTabWorkspace, packWorkspace, TabWorkspaceManager,
   removeTabWorkspace, saveTabWorkspace, unpackWorkspace, workspaceKey,
   workspaceMatchesTab
 } from "../src/lib/tab-workspace";
@@ -119,5 +119,71 @@ describe("per-tab reading workspace", () => {
     const second = { ...first, draft: "latest" };
     await Promise.all([saveTabWorkspace(first), saveTabWorkspace(second)]);
     expect((await loadTabWorkspace(77, first.tabUrl))?.draft).toBe("latest");
+  });
+});
+
+describe("realistic tab reading workflows", () => {
+  it("switches A→B→A without losing A analysis or unfinished input", async () => {
+    const manager = new TabWorkspaceManager();
+    const a = await manager.open(101, "https://arxiv.org/pdf/2601.12345");
+    a.paper = samplePaper;
+    a.digest = sampleDigest;
+    a.conversation.push({ role: "user", text: "What is the baseline?" });
+    a.draft = "Explain table 2";
+    a.view = "ask";
+    await manager.save(a);
+    const b = await manager.open(102, "https://example.org/another.pdf");
+    expect(b.paper).toBeNull();
+    b.paper = { ...samplePaper, id: "p2", title: "Second paper", sourceUrl: "https://example.org/another.pdf" };
+    await manager.save(b);
+    const back = await manager.open(101, "https://arxiv.org/pdf/2601.12345#page=3");
+    expect(back).toMatchObject({
+      view: "ask", draft: "Explain table 2",
+      paper: { id: "p1" }, digest: { tldr: "研究概览" }
+    });
+    expect(back.conversation[0].text).toContain("baseline");
+    expect((await manager.open(102, b.tabUrl)).paper?.id).toBe("p2");
+  });
+
+  it("keeps A's delayed answer on A while B is active", async () => {
+    const manager = new TabWorkspaceManager();
+    const a = await manager.open(201, "https://arxiv.org/pdf/2601.12345");
+    a.paper = samplePaper;
+    a.conversation = [{ role: "user", text: "What was evaluated?" }];
+    await manager.save(a);
+    const b = await manager.open(202, "https://example.org/paper-b.pdf");
+    b.paper = { ...samplePaper, id: "p2", sourceUrl: "https://example.org/paper-b.pdf" };
+    await manager.save(b);
+    const updated = await manager.updatePaper(201, "p1", work => {
+      work.conversation.push({ role: "assistant", text: "Three experiments were evaluated." });
+      work.digest = sampleDigest;
+    });
+    expect(updated).toBe(true);
+    expect((await manager.open(201, a.tabUrl)).conversation).toHaveLength(2);
+    expect((await manager.open(202, b.tabUrl)).conversation).toHaveLength(0);
+    expect((await manager.open(202, b.tabUrl)).digest).toBeNull();
+  });
+
+  it("rejects delayed writes after the source changed in the same tab", async () => {
+    const manager = new TabWorkspaceManager();
+    const a = await manager.open(303, "https://example.org/a.pdf");
+    a.paper = { ...samplePaper, id: "old", sourceUrl: "https://example.org/a.pdf" };
+    await manager.save(a);
+    const navigated = await manager.open(303, "https://example.org/b.pdf");
+    expect(navigated.paper).toBeNull();
+    const result = await manager.updatePaper(303, "old", ws => { ws.digest = sampleDigest; });
+    expect(result).toBe(false);
+    expect((await manager.open(303, "https://example.org/b.pdf")).digest).toBeNull();
+  });
+
+  it("tab closure clears the workspace and not the other paper", async () => {
+    const manager = new TabWorkspaceManager();
+    const one = await manager.open(401, "https://example.org/one.pdf");
+    const two = await manager.open(402, "https://example.org/two.pdf");
+    one.paper = samplePaper; two.paper = { ...samplePaper, id: "two" };
+    await Promise.all([manager.save(one), manager.save(two)]);
+    await manager.close(401);
+    expect(await loadTabWorkspace(401, one.tabUrl)).toBeNull();
+    expect((await loadTabWorkspace(402, two.tabUrl))?.paper?.id).toBe("two");
   });
 });
