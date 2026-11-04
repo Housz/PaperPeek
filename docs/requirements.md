@@ -1,4 +1,4 @@
-# Requirements / PRD — PaperPeek v0.1.3
+# Requirements / PRD — PaperPeek v0.1.4
 
 **Status:** accepted initial scope. **Owner:** repository maintainer. **Last updated:** 2026-11-02. Change with a PR when behavior changes.
 
@@ -50,7 +50,7 @@ How many pages in a typical discipline? Should digest be auto-generated on PDF l
 
 Time to initial paper decision; answer correctness audited against PDF; ratio of verified digest evidence; public PDF load success; Markdown reuse without edits. Do not report invented benchmark scores.
 
-## v0.1.3 acceptance additions
+## v0.1.4 acceptance additions
 
 - Current file:///...pdf is recognized; without file permission, show access instructions instead of silently failing; manual picker still works.
 - One-header source controls are always available: detect, upload, analyze and settings; no second document toolbar.
@@ -59,3 +59,14 @@ Time to initial paper decision; answer correctness audited against PDF; ratio of
 - GET official OpenAI/DeepSeek model catalog and custom ID fallback; model ID affects actual request, so show a test-generation action.
 - Versioned six-preset scientific prompt library; concise Overview requires Chinese (English) first mention and evidence/claims distinction.
 - Do not claim authenticated/blob/POST-only sources or real publisher compatibility until manually verified.
+
+## v0.1.4 acceptance — tab-scoped continuity
+
+- Switching A → B → A restores A's PDF, overview, chat and unsent question draft without another PDF parse or API call.
+- Same PDF open in two different Chrome tabs produces two **independent** workspaces.
+- Closing and reopening the global Side Panel restores the active tab's completed work in the same browser session.
+- An in-flight request started in A may finish while B is visible; its response must be cached under A and never shown under B.
+- Citation navigation (PDF #page fragment) and arXiv abstract-to-matching-PDF transition keep the current paper session.
+- Navigating the *same tab* to a different document clears the old document and starts a fresh workspace.
+- Closing a tab deletes only that tab's cached research state; browser restart or extension reload clears ephemeral session state by design.
+- UI gear icon must be visually distinguishable from the OS light/dark appearance switch.
