@@ -26,7 +26,8 @@ Never direct users to expired GitHub Actions artifacts or temporary chat attachm
 4. Fresh GitHub Actions runner installs dependencies, runs \`npm run check\`, \`npm test\`, and \`npm run build\`.
 5. Package the contents of \`dist/\` into a root-manifest ZIP, verify required files, generate SHA-256.
 6. Using GitHub Actions' built-in repository token with \`contents: write\`, create Git tag and **pre-release** with the ZIP and checksum assets.
-7. Check the live GitHub Release page and download link before telling users the release is available.
+7. Independently verify that the public Release contains **both** the ZIP and `SHA256SUMS.txt`; publish a `paperpeek/release-assets` success status on the merged GitHub commit with the release URL.
+8. Check the status and Release assets before telling users the download is available. On a subsequent same-version main push, publishing is skipped but asset verification still runs.
 
 The workflow uses no third-party release-publishing dependency and no model API keys. \`GITHUB_TOKEN\` is used only by GitHub Actions to publish the release.
 
