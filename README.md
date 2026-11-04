@@ -8,6 +8,8 @@ PaperPeek 是一个面向科研人员的 Chrome 侧边栏扩展，帮助理解**
 
 ## Current features (v0.1.4)
 
+- **当前 AI 模型状态**：顶栏显示所选服务商及实际用于新请求的模型 ID（窄屏悬停查看完整 ID）
+
 - 🔎 识别 Chrome 当前 PDF：arXiv、常见 HTTPS PDF、网页内嵌/下载链接及获授权的本地 file:// PDF；可重新检测、选择候选地址、粘贴 URL 或手动打开文件
 - 🧠 PDF.js 提取分页正文，生成结构化中文论文概览
 - 💬 面向当前论文的多轮问答；内置六类科研阅读提示词，强调术语首次出现时中文＋英文、证据和局限
@@ -21,7 +23,18 @@ PaperPeek 是一个面向科研人员的 Chrome 侧边栏扩展，帮助理解**
 
 **Known limitations:** 对登录/POST/blob 等来源无法保证直接获取；只支持有可提取文本的 PDF；双栏和公式提取可能混乱；文本输入截断上限 125,000 字符；普通问答中的页码是模型建议、**尚未做引文校验**；原生 PDF Viewer 无法由扩展精确高亮；不支持图表框选、OCR、多论文和知识库同步。API 可用性取决于用户密钥、所选模型和供应商政策。
 
-## 安装（开发者模式）
+## 下载与安装（GitHub Releases）
+
+**安装包统一发布在 [GitHub Releases](https://github.com/Housz/PaperPeek/releases)，不再依赖聊天附件或有有效期的 Actions Artifact。**
+
+从 Releases 的 **v0.1.4** 页面下载 `PaperPeek-v0.1.4-chrome.zip`（不要下载 GitHub 自动生成的 Source code ZIP）。解压后打开 `chrome://extensions` → 开启开发者模式 → **加载已解压的扩展程序** → 选择包含 `manifest.json` 的解压目录。可用随附 `SHA256SUMS.txt` 校验 ZIP。
+
+已有解压安装的用户建议**在原安装目录内替换文件并刷新扩展**，不要先删除旧扩展，否则可能丢失本地模型配置。更新前先导出重要 Markdown，扩展重载会清理临时论文会话。
+
+详细步骤：[用户指南](docs/user-guide.md) · [自动发布规范](docs/releasing.md)。
+
+## 从源码开发与安装
+
 
 需要 **Node.js 22.12+、npm、Chrome 116+**。
 
@@ -53,6 +66,7 @@ npm run build
 | [技术架构](docs/architecture.md) | 模块划分、数据与网络流、引用校验 |
 | [使用指南](docs/user-guide.md) | 安装、操作、排障 |
 | [开发规范](docs/development.md) | 工程结构、约定、测试与交付流程 |
+| [GitHub 发布规范](docs/releasing.md) | Release 自动构建、ZIP 安装、版本与校验要求 |
 | [测试计划](docs/testing.md) | 自动化与手动验证矩阵 |
 | [验证报告](docs/verification.md) | CI 结果、未覆盖的真实浏览器与 API 测试 |
 | [PDF 支持矩阵](docs/pdf-support.md) | 文件、本地权限、嵌入 PDF、动态链接及限制 |
@@ -73,7 +87,7 @@ npm run build  # outputs Chrome unpacked extension into dist/
 npm run dev    # build watch mode; reload unpacked extension after updates
 ```
 
-CI（GitHub Actions）会检查 TypeScript、运行单元测试、构建并上传 `dist/` 为构建工件。**CI 不使用也不需要真实 API Key。**
+GitHub Actions 先运行 TypeScript、测试和打包检查；合并到 `main` 时，新的版本会由专门的发布工作流构建 ZIP 与 SHA-256 并发布到 **GitHub Releases**。已有版本不会被静默覆盖。**CI 不使用任何真实 API Key。**
 
 ## Privacy and keys
 
