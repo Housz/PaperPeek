@@ -1,4 +1,4 @@
-# PaperPeek technical architecture — v0.1.3
+# PaperPeek technical architecture — v0.1.4
 
 **Status:** code implemented, real website compatibility still under manual verification.
 
@@ -62,3 +62,17 @@ See [Design System](design-system.md), [PDF support](pdf-support.md), [Prompt li
 ## Change contract
 
 Changes to source discovery must update tests for file scheme, dynamic URLs, multi-PDF candidates and permissions. Changes to provider model lists must update tests and model compatibility caveats. Changes to prompt templates should bump `PROMPT_LIBRARY_VERSION` and be evaluated with human-reviewed papers, not just structural tests.
+
+## Tab-scoped workspace and lifecycle (v0.1.4)
+
+The previous version kept `paper`, `digest` and `conversation` in a single side-panel instance and cleared them on `tabs.onActivated`. PaperPeek now stores one `TabWorkspace` per Chrome tab ID in `src/lib/tab-workspace.ts`, backed by `chrome.storage.session`.
+
+- Each workspace contains selected PDF source, page-indexed extracted text, digest, full conversation, unsent draft and last Overview/Ask/Card view. Markdown is deterministically regenerated from Paper + Digest.
+- The active Side Panel captures the outgoing tab before restoring another. Cached workspace identity is checked against the current tab URL, permitting same PDF fragment and arXiv abstract-to-PDF navigation.
+- Completed model results are bound by originating tab ID and Paper ID; updates mutate the original cache **before** awaiting storage, preventing a late tab switch from overwriting the result. Closed tabs reject late updates.
+- Per-tab writes are serialized; gzip compression reduces PDF text's memory cost under the 10 MiB Chrome session quota.
+- Service Worker and Side Panel use `tabs.onRemoved` cleanup. Workspace records contain no API keys or raw PDF bytes.
+- Session storage is cleared on browser restart, extension update/reload and uninstall. It is an ephemeral reading state, **not** a persistent paper archive.
+- Work in progress while Side Panel itself closes is not guaranteed to finish. Data already checkpointed remains available for retry.
+
+See [tab sessions](tab-sessions.md) and [verification](verification.md).
