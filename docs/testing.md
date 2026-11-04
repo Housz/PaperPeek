@@ -90,3 +90,10 @@ Manual desktop Chrome end-to-end acceptance required before public release:
 | W12 | Reload extension or restart browser | Temporary sessions clear with explicit documented limitation |
 
 Also test 300/360/450px Side Panel widths, restricted file permission and offline/error handling. Never place real API keys or private PDFs in CI artifacts.
+
+## v0.1.4 release and model status smoke
+
+- Model status: after loading the extension, verify the current service/model name in the single header; change the model ID in Settings and Save, confirm the header updates without refreshing the tab. At 300px width, hover for the full ID.
+- Use only a test/dummy key in CI. Model name is independent of the confidential API Key; never display a key in header or screenshot.
+- GitHub Release workflow (after merge to main): verify GitHub Actions check/test/build success, tag `v0.1.4`, GitHub Release Assets `PaperPeek-v0.1.4-chrome.zip` and `SHA256SUMS.txt`. Unzip and confirm `manifest.json` is at ZIP root.
+- Loading from Release assets is a **manual Chrome smoke**. Verify real PDF analysis and tab continuity after installation; do not infer it from unit or mocked DOM tests.
