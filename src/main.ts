@@ -881,6 +881,11 @@ askInput.addEventListener("keydown", event => {
     event.preventDefault(); askForm.requestSubmit();
   }
 });
+askInput.addEventListener("input", () => {
+  // Persist unsent questions too; tab switches force an immediate checkpoint.
+  if (draftSaveTimer) clearTimeout(draftSaveTimer);
+  draftSaveTimer = setTimeout(() => checkpointWorkspace(), 350);
+});
 
 providerInput.addEventListener("change", () => {
   // Preserve unsaved drafts without copying another provider's key.
@@ -963,6 +968,23 @@ chrome.tabs.onUpdated.addListener((tabId, info) => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "session" && changes["paperpeek.selection"]) void acceptSelection();
 });
+chrome.tabs.onRemoved.addListener(tabId => {
+  pendingTabs.delete(tabId);
+  void workspaces.close(tabId).catch(() => undefined);
+  if (activeTabId === tabId) {
+    // The document was closed: discard the dead tab without checkpointing it.
+    if (draftSaveTimer) clearTimeout(draftSaveTimer);
+    activeTabId = undefined;
+    tabUrl = "";
+    activePdfUrl = null;
+    paper = null;
+    digest = null;
+    conversation = [];
+    askInput.value = "";
+    cardText.value = "";
+    void refreshActiveTab();
+  }
+});
 
 async function init(): Promise<void> {
   try {
@@ -975,6 +997,7 @@ async function init(): Promise<void> {
   }
   renderOverview();
   renderChat();
-  setView("overview");
+  // The last reading destination is scoped to the restored tab.
+  setView(lastReadingView);
 }
 void init();
