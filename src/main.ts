@@ -437,14 +437,16 @@ async function refreshActiveTab(thorough = false, rescan = false): Promise<void>
     // Preserve the outgoing workspace *before* replacing active tab identity.
     if (draftSaveTimer) clearTimeout(draftSaveTimer);
     checkpointWorkspace();
-    activeTabId = id;
-    tabUrl = url;
     showStatus("");
     if (id !== undefined) {
       const restored = await workspaces.open(id, url);
       if (generation !== scanGeneration) return;
+      activeTabId = id;
+      tabUrl = url;
       restoreWorkspace(restored);
     } else {
+      activeTabId = undefined;
+      tabUrl = url;
       // No user tab: show a neutral empty state, never another paper's content.
       restoringWorkspace = true;
       try {
