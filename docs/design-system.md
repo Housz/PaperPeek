@@ -10,7 +10,7 @@ Reference principles (no proprietary code reused): [GitHub Primer](https://prime
 
 ## Information architecture
 
-\`\`\`text
+```text
 ┌───────────────────────────────────────┐
 │ PaperPeek / paper title   ↻  ↥  分析 ⚙ │  single header (min 65px)
 ├───────────────────────────────────────┤
@@ -20,7 +20,7 @@ Reference principles (no proprietary code reused): [GitHub Primer](https://prime
 │ / Q&A + prompt quick actions          │
 │ / Markdown export                     │
 └───────────────────────────────────────┘
-\`\`\`
+```
 
 The top row is **one header**, not separate application and paper toolbars. Compact brand and title share one identity block; a small group of explicit source actions is at the right. Long paper titles are ellipsized, with full value in the tooltip. The user can re-detect current tab, choose local file, analyze or open model settings without secondary bars.
 
@@ -43,28 +43,28 @@ Spacing scale: **4 / 8 / 12 / 16 / 20 / 24px**, default content gutter **16px** 
 
 ## Semantic colors
 
-CSS token source is \`src/styles.css\` with OS light/dark variants. Keep semantic role instead of hardcoding new component colors.
+CSS token source is `src/styles.css` with OS light/dark variants. Keep semantic role instead of hardcoding new component colors.
 
 | Token | Light | Purpose |
 |---|---|---|
-| \`--canvas\` | \`#fff\` | Reading background |
-| \`--surface\` | \`#fff\` | Inputs |
-| \`--subtle\` | \`#f6f7f8\` | Gentle separation |
-| \`--text\` | \`#1b252d\` | Reading text |
-| \`--muted\` | \`#596773\` | Labels |
-| \`--faint\` | \`#6a7680\` | Rare secondary hints |
-| \`--border\` | \`#e5e8eb\` | Hairline sections |
-| \`--primary\` | \`#1c685b\` | Primary action / source link |
-| \`--error\` | \`#a12f32\` | Warning with text explanation |
-| \`--focus\` | \`#237c70\` | Visible keyboard focus |
+| `--canvas` | `#fff` | Reading background |
+| `--surface` | `#fff` | Inputs |
+| `--subtle` | `#f6f7f8` | Gentle separation |
+| `--text` | `#1b252d` | Reading text |
+| `--muted` | `#596773` | Labels |
+| `--faint` | `#6a7680` | Rare secondary hints |
+| `--border` | `#e5e8eb` | Hairline sections |
+| `--primary` | `#1c685b` | Primary action / source link |
+| `--error` | `#a12f32` | Warning with text explanation |
+| `--focus` | `#237c70` | Visible keyboard focus |
 
 Use a readable color contrast and explicit words; no status conveyed by color alone.
 
 ## Component behavior
 
 - **Source detection:** icon button with title and accessible label, always available even if no PDF was detected. Never automatically upload document text to AI during detection.
-- **Local file:** icon button opens browser file picker; if current \`file://\` needs permission, render contextual explanation and a link to Chrome extension details.
-- **Main action:** single \`分析\` button only when a PDF source is selected; if API Key is missing, routes to Settings.
+- **Local file:** icon button opens browser file picker; if current `file://` needs permission, render contextual explanation and a link to Chrome extension details.
+- **Main action:** single `分析` button only when a PDF source is selected; if API Key is missing, routes to Settings.
 - **Source candidates:** selection input appears only with multiple candidates, never auto-pick several unrelated files.
 - **Overview:** textual research structure with section dividers; verified PDF page link is underlined text.
 - **Ask:** compact question presets from the versioned registry (not duplicated hard-coded prompts); assistant answer is reading text, user question in subtle surface.
@@ -79,4 +79,4 @@ Required screenshot widths **300 / 360 / 450px**, including long paper filename,
 
 ## Change contract
 
-Update \`sidepanel.html\`, \`src/styles.css\`, \`src/main.ts\`, \`docs/ui-design.md\`, this file and \`tests/ui.test.ts\` when navigation or controls change. Do not add visual ornament without a documented user need.
+Update `sidepanel.html`, `src/styles.css`, `src/main.ts`, `docs/ui-design.md`, this file and `tests/ui.test.ts` when navigation or controls change. Do not add visual ornament without a documented user need.
