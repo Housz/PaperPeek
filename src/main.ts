@@ -129,6 +129,7 @@ function setView(view: string): void {
     el.setAttribute("aria-selected", String(selected));
     el.tabIndex = selected ? 0 : -1;
   });
+  renderSourceChooser();
   renderPaperState();
   checkpointWorkspace();
 }
@@ -203,10 +204,11 @@ function isCurrentPaper(tabId: number, paperId: string): boolean {
 async function updatePaperResult(
   tabId: number, paperId: string, update: (workspace: TabWorkspace) => void
 ): Promise<boolean> {
-  const exists = await workspaces.updatePaper(tabId, paperId, update);
-  if (!exists) return false;
-  if (isCurrentPaper(tabId, paperId)) {
-    const saved = workspaces.get(tabId)!;
+  // The cache changes synchronously. Update the visible view BEFORE awaiting
+  // storage: otherwise a tab-switch checkpoint could overwrite this new result.
+  const pendingSave = workspaces.updatePaper(tabId, paperId, update);
+  const saved = workspaces.get(tabId);
+  if (saved?.paper?.id === paperId && isCurrentPaper(tabId, paperId)) {
     digest = saved.digest;
     conversation = [...saved.conversation];
     cardText.value = paper && digest ? toMarkdown(paper, digest) : "";
@@ -214,7 +216,7 @@ async function updatePaperResult(
     renderChat();
     renderPaperState();
   }
-  return true;
+  return pendingSave;
 }
 
 function renderSourceChooser(): void {
@@ -596,7 +598,7 @@ async function acceptParsedPaper(
   target.conversation = [];
   target.draft = "";
   target.view = "overview";
-  await workspaces.save(target);
+  const pendingSave = workspaces.save(target);
   if (activeTabId === tabId && (expectedSource === null || activePdfUrl === expectedSource)) {
     activePdfUrl = expectedSource;
     paper = loaded;
@@ -609,6 +611,7 @@ async function acceptParsedPaper(
     renderChat();
     renderPaperState();
   }
+  await pendingSave;
   return true;
 }
 
