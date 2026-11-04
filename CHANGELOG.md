@@ -2,6 +2,26 @@
 
 All notable changes are recorded here. Versions follow semantic versioning for MVP milestones.
 
+## [0.1.4] - 2026-11-04
+
+### Fixed
+- Preserve independent paper workspaces across Chrome tab switches instead of clearing the only in-memory state.
+- Restore parsed paper text, research overview, Q&A, unsent draft, current reading tab and regenerated Markdown Card when reopening Side Panel.
+- Keep asynchronous overview/Q&A results in the originating paper tab even if the user switches tabs while the API request is in flight.
+- Keep session intact during native PDF page-fragment jumps and arXiv abstract-to-PDF navigation; reset only when a tab opens an unrelated document.
+- Remove a closed tab's cached paper data using `tabs.onRemoved`, without affecting other research tabs.
+- Replace the sun-like Settings glyph with an unambiguous gear.
+
+### Quality
+- Add compressed per-tab Chrome `storage.session` persistence with ordered writes and 10 MiB quota awareness.
+- Add per-tab lifecycle and Side Panel DOM integration tests for common researcher workflows.
+- Document session boundaries, privacy controls and real-Chrome manual acceptance.
+
+### Limits
+- Workspaces are ephemeral and clear on browser restart or extension reload/update; not a paper archive.
+- An in-flight model call can be cancelled if the Side Panel itself is closed; completed results are retained.
+- Desktop Chrome Side Panel lifecycle still requires manual end-to-end smoke validation.
+
 ## [0.1.3] - 2026-11-03
 
 ### Added
