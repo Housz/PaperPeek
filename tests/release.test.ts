@@ -17,6 +17,7 @@ describe("GitHub Release publishing contract", () => {
     expect(workflow).toContain("branches: [main]");
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).toContain("contents: write");
+    expect(workflow).toContain("statuses: write");
     expect(workflow).toContain("concurrency:");
     expect(workflow).not.toContain("pull_request:");
   });
@@ -37,6 +38,8 @@ describe("GitHub Release publishing contract", () => {
     expect(workflow).not.toContain("gh release upload");
     expect(workflow).toContain('ZIP_NAME="PaperPeek-\${TAG}-chrome.zip"');
     expect(workflow).toContain("SHA256SUMS.txt");
+    expect(workflow).toContain("paperpeek/release-assets");
+    expect(workflow).toContain('gh release view "$TAG"');
     expect(workflow).toContain("docs/releases/");
     expect(file("docs/releases/v0.1.4.md")).toContain("PaperPeek-v0.1.4-chrome.zip");
   });
