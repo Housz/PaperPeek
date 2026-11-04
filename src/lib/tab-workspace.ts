@@ -107,8 +107,12 @@ export async function unpackWorkspace(value: unknown): Promise<TabWorkspace | nu
   } else if (record.format === "gzip-base64") {
     if (typeof DecompressionStream === "undefined") return null;
     const bytes = fromBase64(record.data);
+    // Copy into a concrete ArrayBuffer; BlobPart rejects ArrayBufferLike
+    // (which may include SharedArrayBuffer) under strict TypeScript.
+    const buffer = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(buffer).set(bytes);
     json = await new Response(
-      new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))
+      new Blob([buffer]).stream().pipeThrough(new DecompressionStream("gzip"))
     ).text();
   } else return null;
   try {
