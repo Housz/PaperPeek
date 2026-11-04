@@ -1,4 +1,4 @@
-# Test plan — v0.1.3
+# Test plan — v0.1.4
 
 **Test strategy:** deterministic unit tests in CI + real Chrome/PDF/provider manual smoke. Do not infer successful production behavior from mocked tests.
 
@@ -12,7 +12,7 @@
 
 CI runs TypeScript check, unit tests and bundle build; publishes `dist` artifact.
 
-## UI acceptance (v0.1.3)
+## UI acceptance (v0.1.4)
 
 Check at 300 / 360 / 450px sidebar width, light and OS-dark modes: source strip is compact and hidden when no PDF or while Settings is open; only Overview / Ask / Card are main tabs; explanation quick questions live in Ask; Settings back restores last reading tab; empty-state actions reflect PDF+BYOK readiness; keyboard arrow keys navigate tabs; paper text, page links, chat and Markdown do not clip horizontally.
 
@@ -48,7 +48,7 @@ The unit suite deliberately uses only dummy credentials and mocked responses. Ac
 
 Every new Chrome permission, PDF fetch strategy, prompt field, provider adapter or Markdown field needs corresponding tests and user guide update.
 
-## v0.1.3 focused regression matrix
+## v0.1.4 focused regression matrix
 
 | ID | Case | Expected |
 |---|---|---|
@@ -68,3 +68,25 @@ Every new Chrome permission, PDF fetch strategy, prompt field, provider adapter 
 | U01 | Side Panel 300/360/450px | Single header, no overflow, 14px reading text, keyboard controls |
 
 Do not interpret mocked tests as successful compatibility tests against publishers or actual browser file access.
+## v0.1.4 common researcher journey tests
+
+Automated `tests/tab-workspace.test.ts` and `tests/reader-flows.test.ts` cover compressed storage, A→B→A tab switching, identical URL tabs, reopen panel, draft retention, delayed responses, verified-source page jumps, invalidation on unrelated navigation and tab closure. The UI integration tests execute the **actual Side Panel TypeScript entrypoint and DOM** with mocked Chrome and LLM API calls (happy-dom), not a real Chrome extension runtime.
+
+Manual desktop Chrome end-to-end acceptance required before public release:
+
+| ID | Workflow | Expected |
+|---|---|---|
+| W01 | Analyze PDF A, ask questions, switch to PDF B, then back | A restores overview, questions, card, no reanalysis |
+| W02 | Same PDF opened in two tabs | Independent state per tab ID |
+| W03 | Close and reopen Side Panel (not tab) | All completed results and draft restored |
+| W04 | Start analysis in A, immediately switch to B, then back | Completed result belongs to A, never B |
+| W05 | Start Q&A in A, switch to B during answer | Answer appears only under A |
+| W06 | Follow verified source link #page=N | Paper session preserved and browser PDF navigates |
+| W07 | Open a different PDF in the same tab | Old paper and Q&A reset |
+| W08 | Local file picker PDF on article tab, switch away and back | Restored local imported paper |
+| W09 | Close A tab, keep B open | A cache cleaned, B remains |
+| W10 | Type unfinished question, switch tabs and back | Draft and last reading view restored |
+| W11 | Open Settings while Ask active, return to reading | Same tab and current work remain |
+| W12 | Reload extension or restart browser | Temporary sessions clear with explicit documented limitation |
+
+Also test 300/360/450px Side Panel widths, restricted file permission and offline/error handling. Never place real API keys or private PDFs in CI artifacts.
