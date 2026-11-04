@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
-const html = readFileSync(new URL("../sidepanel.html", import.meta.url), "utf8");
+const html = readFileSync(resolve(process.cwd(), "sidepanel.html"), "utf8");
 const mock = vi.hoisted(() => ({
   generate: vi.fn(),
   parse: vi.fn()
