@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  statuses: write
 
 concurrency:
   group: paperpeek-release
@@ -104,3 +105,35 @@ jobs:
             --jq '{url,assets:[.assets[].name]}'
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets \
             --jq '.assets[].name' | grep -qx "$ZIP_NAME"
+
+      - name: Verify GitHub Release assets are actually downloadable
+        id: verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP_NAME="PaperPeek-${TAG}-chrome.zip"
+          ASSET_NAMES="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          printf '%s\n' "$ASSET_NAMES" | grep -Fxq "$ZIP_NAME"
+          printf '%s\n' "$ASSET_NAMES" | grep -Fxq 'SHA256SUMS.txt'
+          RELEASE_URL="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url --jq '.url')"
+          test -n "$RELEASE_URL"
+          echo "url=$RELEASE_URL" >> "$GITHUB_OUTPUT"
+          echo "::notice::Verified release ZIP and checksum: $RELEASE_URL"
+
+      - name: Record verified release on GitHub commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_URL: ${{ steps.verify.outputs.url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=success \
+            -f context=paperpeek/release-assets \
+            -f description="Verified ${TAG} Chrome ZIP and SHA256SUMS on GitHub Release" \
+            -f target_url="$RELEASE_URL" >/dev/null
+          echo "::notice::Recorded verified release on commit $GITHUB_SHA"
