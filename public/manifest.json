@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "PaperPeek",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Understand a research PDF, ask questions, and export a concise Markdown paper card.",
   "minimum_chrome_version": "116",
   "permissions": [

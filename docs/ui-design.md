@@ -1,4 +1,4 @@
-# Interaction design — PaperPeek v0.1.3
+# Interaction design — PaperPeek v0.1.4
 
 **Status:** implemented, manual Chrome verification pending.
 
@@ -43,3 +43,9 @@ One header (~65px), three tabs (Overview, Ask, Card), task content. No second pa
 ## Accessibility and QA
 
 Three tabs with roving tabIndex; named icon actions; 2px keyboard focus; status live region; model picker can be operated by keyboard; buttons disabled during active long tasks. Check 300/360/450px, system dark mode and long Chinese model names, compare with [design system](design-system.md).
+
+## v0.1.4 continuity and Settings affordance
+
+Chrome tabs act as independent paper workspaces: the Overview/Ask/Card view, questions, unsent draft and Paper Card follow each tab. Switching to another PDF must not erase the first; reopening the global Side Panel should restore the active tab. The Settings action uses a recognizable gear shape (`svg[data-icon="settings"]`) and remains distinct from sun/moon theme controls.
+
+The status badge may show **处理中** when a model call is ongoing in the active tab. Switching to a different tab permits the second paper to be used independently; a delayed response returns only to the original tab.

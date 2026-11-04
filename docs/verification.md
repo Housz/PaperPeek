@@ -1,4 +1,4 @@
-# Verification report — PaperPeek (through v0.1.3)
+# Verification report — PaperPeek (through v0.1.4)
 
 **Date:** 2026-11-02  
 **Status:** automated checks successful; real browser end-to-end and live provider call **not yet verified**.
@@ -85,3 +85,22 @@ Follow [testing.md](testing.md), especially M01–M15, on desktop Chrome. Use an
 **Still awaiting genuine desktop Chrome acceptance:** toggle file URL access off/on and read the currently opened local PDF without a file picker; test several public non-arXiv publisher URLs (including downloads that redirect to CDNs); verify real OpenAI/DeepSeek model catalog requests and persisted BYOK key after restart; validate page navigation and multi-PDF choice; expert-check terminology and source accuracy of the prompts.
 
 The automated test counts above do **not** certify those browser/provider workflows. Continue to call v0.1.3 an **experimental MVP** until the owner records actual pass/fail evidence using the matrix in `docs/testing.md`.
+
+
+## v0.1.4 — tab workspace continuity and settings icon (2026-11-04)
+
+**Verified in CI:**
+- [Passing GitHub Actions run 41766461379](https://github.com/Housz/PaperPeek/actions/runs/41766461379): strict TypeScript check, **51/51 passing tests in 10 test files**, Vite bundle build, packaged manifest / service worker checks and zipped unpacked extension artifact.
+- [`tests/tab-workspace.test.ts`](../tests/tab-workspace.test.ts) (12 cases): per-tab storage isolation, same-URL tabs, A→B→A, local PDF manual import, saved draft, fragment navigation, arXiv abstract-to-PDF, delayed results, source invalidation, tab closure and gzip round trip.
+- [`tests/reader-flows.test.ts`](../tests/reader-flows.test.ts) (5 cases): actual Side Panel DOM/TypeScript entry with **mocked Chrome tabs, storage and provider**. Tests analyze A → ask → B → A → reopen panel, delayed digest, delayed chat response, source navigation, citation page jump and Settings return.
+- [`tests/ui.test.ts`](../tests/ui.test.ts) ensures accessible gear icon (`data-icon="settings"`) rather than sun-shaped appearance affordance.
+- `chrome.storage.session` snapshot includes paper text, digest, messages, draft and reading destination but **never API keys**. Tab-close event removes that tab's state.
+
+**Not tested as real Chrome acceptance:**
+- Desktop Chrome global Side Panel switching and closing/reopening with an actual live PDF and actual provider key.
+- Persistence behavior when several windows are open; interactions with browser memory pressure or exceeding `storage.session`'s 10 MiB quota.
+- Real file URL permissions and publisher redirect behavior after reopening the panel.
+- In-flight provider calls if the Side Panel is closed: browser may terminate requests. The product only promises restoration of **completed** work.
+- Browser restart or extension reload/update clears ephemeral `storage.session` per official Chrome documentation, even when Chrome restores tabs; a future opt-in durable cache would need separate requirements and privacy review.
+
+**Release status:** experimental MVP v0.1.4. Simulated UI tests plus a packaged build give stronger confidence than pure unit tests, but they are not a real desktop Chrome extension smoke test. Follow [tab-session manual checklist](tab-sessions.md) and [testing](testing.md) before store publication.

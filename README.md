@@ -4,17 +4,20 @@
 
 PaperPeek 是一个面向科研人员的 Chrome 侧边栏扩展，帮助理解**当前的一篇 PDF 论文**，快速判断研究价值、向论文提问，并导出便于回顾与 AI 再利用的简短 Markdown 论文卡片。
 
-> Status: **v0.1.3 experimental MVP**. Public arXiv PDFs are the primary test target. Not a PDF replacement, citation manager, archive or multi-paper knowledge base.
+> Status: **v0.1.4 experimental MVP**. Public arXiv PDFs are the primary test target. Not a PDF replacement, citation manager, archive or multi-paper knowledge base.
 
-## Current features (v0.1.3)
+## Current features (v0.1.4)
 
 - 🔎 识别 Chrome 当前 PDF：arXiv、常见 HTTPS PDF、网页内嵌/下载链接及获授权的本地 file:// PDF；可重新检测、选择候选地址、粘贴 URL 或手动打开文件
 - 🧠 PDF.js 提取分页正文，生成结构化中文论文概览
 - 💬 面向当前论文的多轮问答；内置六类科研阅读提示词，强调术语首次出现时中文＋英文、证据和局限
 - 🔗 概览中的关键实验发现，只有当短引文能够在对应 PDF 页中匹配时才显示已验证页码跳转
 - 📝 自动生成精简 **Paper Card**，一键复制或下载 UTF-8 `.md`
+- 📑 每个 Chrome 标签页有独立的临时工作区：切换标签或关闭再打开 Side Panel 后恢复已分析的论文、问答和输入草稿；关闭标签页即清除
 - 🔑 无 PaperPeek 后端，按服务商分别配置模型和 API Key；OpenAI / DeepSeek 可同步官方模型列表，支持手动指定 ID 和自愿持久保存密钥
 - 📌 右键选中文字 → Explain with PaperPeek（在原生 Chrome PDF Reader 中能否提供选区取决于浏览器行为）
+
+**Session note:** 标签页关闭前，已完成的分析会保留在当前 Chrome 会话内。浏览器重启、扩展重新加载或更新会清除 `chrome.storage.session`；本功能不是永久文献归档。
 
 **Known limitations:** 对登录/POST/blob 等来源无法保证直接获取；只支持有可提取文本的 PDF；双栏和公式提取可能混乱；文本输入截断上限 125,000 字符；普通问答中的页码是模型建议、**尚未做引文校验**；原生 PDF Viewer 无法由扩展精确高亮；不支持图表框选、OCR、多论文和知识库同步。API 可用性取决于用户密钥、所选模型和供应商政策。
 
@@ -53,6 +56,7 @@ npm run build
 | [测试计划](docs/testing.md) | 自动化与手动验证矩阵 |
 | [验证报告](docs/verification.md) | CI 结果、未覆盖的真实浏览器与 API 测试 |
 | [PDF 支持矩阵](docs/pdf-support.md) | 文件、本地权限、嵌入 PDF、动态链接及限制 |
+| [标签页工作区](docs/tab-sessions.md) | 会话恢复、切换标签、结果隔离、清理与限制 |
 | [科研 Prompt 库](docs/prompts.md) | 双语术语、证据规范、内置模板和评估标准 |
 | [安全与隐私](docs/security.md) | API Key、权限、PDF 和提示注入风险 |
 | [路线图](docs/roadmap.md) | 版本边界、待验证能力 |

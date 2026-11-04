@@ -1,4 +1,4 @@
-# PaperPeek design system — compact Side Panel v0.1.3
+# PaperPeek design system — compact Side Panel v0.1.4
 
 **Status:** implemented as CSS tokens and DOM. **Owner:** maintainer. **Updated:** 2026-11-03.
 
@@ -80,3 +80,9 @@ Required screenshot widths **300 / 360 / 450px**, including long paper filename,
 ## Change contract
 
 Update `sidepanel.html`, `src/styles.css`, `src/main.ts`, `docs/ui-design.md`, this file and `tests/ui.test.ts` when navigation or controls change. Do not add visual ornament without a documented user need.
+
+## v0.1.4 icon semantics
+
+Settings is a conventional toothed gear (not a sun, brightness, appearance icon). Keep `aria-label="模型设置"` and `data-icon="settings"` in the SVG. The topbar contains source detection, file picker, Analyze and this one Settings action. Never use theme iconography to indicate model configuration.
+
+When returning to a previously analyzed tab, show its last reading view and existing content without a large empty-state flash. Keep the 65px single header and visible focus styles.

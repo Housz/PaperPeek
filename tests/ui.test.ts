@@ -28,6 +28,7 @@ describe("single-header reader UI contract", () => {
     expect(html).toContain('aria-label="重新检测当前页面的 PDF"');
     expect(html).toContain('aria-label="选择本地 PDF"');
     expect(html).toContain('aria-label="模型设置"');
+    expect(html).toContain('data-icon="settings"');
     expect(html).toContain('id="rememberInput"');
     expect(html).toContain("关闭后仍可使用");
     expect(html).toContain('role="tablist"');

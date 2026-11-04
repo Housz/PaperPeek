@@ -14,6 +14,10 @@ import {
 import {
   forgetProviderKey, loadCredentials, saveCredentials, type Credentials
 } from "./lib/storage";
+import {
+  TabWorkspaceManager, blankWorkspace, workspaceMatchesTab,
+  documentIdentity, type TabWorkspace, type ReadingView
+} from "./lib/tab-workspace";
 
 const byId = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const element = document.getElementById(id);
@@ -63,8 +67,12 @@ const settingsForm = byId<HTMLFormElement>("settingsForm");
 const testBtn = byId<HTMLButtonElement>("testBtn");
 const clearKeyBtn = byId<HTMLButtonElement>("clearKeyBtn");
 
+const workspaces = new TabWorkspaceManager();
+const pendingTabs = new Set<number>();
 let activeTabId: number | undefined;
 let tabUrl = "";
+let restoringWorkspace = false;
+let draftSaveTimer: ReturnType<typeof setTimeout> | undefined;
 let activePdfUrl: string | null = null;
 let candidates: string[] = [];
 let scanPerformed = false;
@@ -90,7 +98,12 @@ function showStatus(message: string, error = false): void {
   status.textContent = message;
   status.className = error ? "status status-error" : "status";
 }
-function setBusy(value: boolean): void {
+function setBusy(value: boolean, tabId = activeTabId): void {
+  if (tabId !== undefined) {
+    if (value) pendingTabs.add(tabId);
+    else pendingTabs.delete(tabId);
+  }
+  if (tabId !== activeTabId) return;
   busy = value;
   analyzeBtn.disabled = value;
   detectBtn.disabled = value;
@@ -100,6 +113,7 @@ function setBusy(value: boolean): void {
   uploadBtn.disabled = value;
   emptyAction.disabled = value;
   sourceChooseBtn.disabled = value;
+  renderPaperState();
 }
 function setView(view: string): void {
   currentView = view;
@@ -116,7 +130,9 @@ function setView(view: string): void {
     el.setAttribute("aria-selected", String(selected));
     el.tabIndex = selected ? 0 : -1;
   });
+  renderSourceChooser();
   renderPaperState();
+  checkpointWorkspace();
 }
 function create<K extends keyof HTMLElementTagNameMap>(
   tag: K, className = "", text = ""
@@ -125,6 +141,83 @@ function create<K extends keyof HTMLElementTagNameMap>(
   if (className) element.className = className;
   if (text) element.textContent = text;
   return element;
+}
+
+
+/** Snapshot only the active tab's reading data. No provider credentials. */
+function currentWorkspaceSnapshot(): TabWorkspace | null {
+  if (activeTabId === undefined) return null;
+  const existing = workspaces.get(activeTabId) || blankWorkspace(activeTabId, tabUrl);
+  return {
+    ...existing,
+    tabUrl,
+    selectedPdfUrl: activePdfUrl,
+    candidates: [...candidates],
+    scanPerformed,
+    paper,
+    digest,
+    conversation: conversation.map(message => ({ ...message })),
+    draft: askInput.value,
+    view: lastReadingView === "ask" || lastReadingView === "card"
+      ? lastReadingView : "overview"
+  };
+}
+
+/** Updates are queued in storage.session; switching tabs never discards a snapshot. */
+function checkpointWorkspace(): void {
+  if (restoringWorkspace || activeTabId === undefined) return;
+  const snapshot = currentWorkspaceSnapshot();
+  if (!snapshot) return;
+  void workspaces.save(snapshot).catch(() => {
+    if (activeTabId === snapshot.tabId)
+      showStatus("临时会话保存失败。请复制重要结果，或关闭其他论文标签后重试。", true);
+  });
+}
+
+function restoreWorkspace(state: TabWorkspace): void {
+  const keepSettings = currentView === "settings";
+  restoringWorkspace = true;
+  try {
+    activePdfUrl = state.selectedPdfUrl;
+    candidates = [...state.candidates];
+    scanPerformed = state.scanPerformed;
+    paper = state.paper;
+    digest = state.digest;
+    conversation = state.conversation.map(item => ({ ...item }));
+    askInput.value = state.draft;
+    cardText.value = paper && digest ? toMarkdown(paper, digest) : "";
+    lastReadingView = state.view;
+    renderSourceChooser();
+    renderOverview();
+    renderChat();
+    setView(keepSettings ? "settings" : state.view);
+    setBusy(pendingTabs.has(state.tabId), state.tabId);
+  } finally {
+    restoringWorkspace = false;
+  }
+}
+
+function isCurrentPaper(tabId: number, paperId: string): boolean {
+  return activeTabId === tabId && paper?.id === paperId;
+}
+
+/** When an AI call finishes after a tab switch, keep its result in its original tab. */
+async function updatePaperResult(
+  tabId: number, paperId: string, update: (workspace: TabWorkspace) => void
+): Promise<boolean> {
+  // The cache changes synchronously. Update the visible view BEFORE awaiting
+  // storage: otherwise a tab-switch checkpoint could overwrite this new result.
+  const pendingSave = workspaces.updatePaper(tabId, paperId, update);
+  const saved = workspaces.get(tabId);
+  if (saved?.paper?.id === paperId && isCurrentPaper(tabId, paperId)) {
+    digest = saved.digest;
+    conversation = [...saved.conversation];
+    cardText.value = paper && digest ? toMarkdown(paper, digest) : "";
+    renderOverview();
+    renderChat();
+    renderPaperState();
+  }
+  return pendingSave;
 }
 
 function renderSourceChooser(): void {
@@ -196,7 +289,7 @@ function renderPaperState(): void {
     ? paper.totalPages + " 页" + (paper.truncated ? " · 文本已截断" : "")
     : activePdfUrl || "";
   paperState.hidden = !hasPaper || currentView === "settings";
-  paperState.textContent = digest ? "已分析" : paper ? "已读取" : "待分析";
+  paperState.textContent = busy ? "处理中" : digest ? "已分析" : paper ? "已读取" : "待分析";
   analyzeBtn.hidden = currentView === "settings" || !hasPaper;
   analyzeBtn.textContent = !credentials.apiKey.trim() ? "设置" :
     digest ? "重新分析" : "分析";
@@ -208,9 +301,12 @@ function renderPaperState(): void {
 }
 
 function resetPaper(): void {
-  paper = null; digest = null; conversation = []; cardText.value = "";
+  paper = null; digest = null; conversation = [];
+  cardText.value = "";
+  askInput.value = "";
   overviewContent.replaceChildren();
   renderOverview(); renderChat(); renderPaperState();
+  checkpointWorkspace();
 }
 
 function makeCard(title: string, text: string | string[], lead = false): HTMLElement {
@@ -333,26 +429,46 @@ async function inspectPage(tabId: number): Promise<string[]> {
 
 /** Automatically scans current tab and DOM; explicit Detect may also use HEAD. */
 async function refreshActiveTab(thorough = false, rescan = false): Promise<void> {
-  // Multiple tab events can arrive while a PDF DOM scan, permissions request
-  // or HEAD probe is still in flight. Only the newest result may modify UI.
+  // Ignore previous asynchronous tab scans when the user changes tabs or chooses a file.
   const generation = ++scanGeneration;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (generation !== scanGeneration) return;
   const url = tabIdentity(tab?.url);
   const id = tab?.id;
   const changed = id !== activeTabId || url !== tabUrl;
+
   if (changed) {
-    const samePdf = !!paper &&
-      (candidatePdfUrl(url) === paper.sourceUrl || url === paper.sourceUrl);
-    activeTabId = id;
-    tabUrl = url;
+    // Preserve the outgoing workspace *before* replacing active tab identity.
+    if (draftSaveTimer) clearTimeout(draftSaveTimer);
+    checkpointWorkspace();
     showStatus("");
-    if (!samePdf) {
-      activePdfUrl = candidatePdfUrl(url);
-      candidates = [];
-      scanPerformed = false;
-      filePermissionBlocked = false;
-      if (paper) resetPaper();
+    if (id !== undefined) {
+      const restored = await workspaces.open(id, url);
+      if (generation !== scanGeneration) return;
+      activeTabId = id;
+      tabUrl = url;
+      restoreWorkspace(restored);
+    } else {
+      activeTabId = undefined;
+      tabUrl = url;
+      // No user tab: show a neutral empty state, never another paper's content.
+      restoringWorkspace = true;
+      try {
+        activePdfUrl = null;
+        candidates = [];
+        scanPerformed = false;
+        paper = null;
+        digest = null;
+        conversation = [];
+        askInput.value = "";
+        cardText.value = "";
+        lastReadingView = "overview";
+        renderOverview();
+        renderChat();
+        setView("overview");
+      } finally {
+        restoringWorkspace = false;
+      }
     }
   }
 
@@ -362,17 +478,16 @@ async function refreshActiveTab(thorough = false, rescan = false): Promise<void>
   if (!stillCurrent()) return;
   filePermissionBlocked = !!activePdfUrl?.startsWith("file:") && !allowed;
 
-  if (id !== undefined && !filePermissionBlocked && (changed || thorough || rescan)) {
+  if (id !== undefined && !filePermissionBlocked && (changed || thorough || rescan) && !paper) {
     let found = await inspectPage(id);
     if (!stillCurrent()) return;
     if (!found.length && thorough && url.startsWith("https:")) {
       try {
-        // Only explicit Detect requests for additional host permission.
         const access = await requestHostAccess(url);
         if (!stillCurrent()) return;
         if (access) found = await inspectPage(id);
         if (!stillCurrent()) return;
-      } catch { /* Manual source fallback stays available. */ }
+      } catch { /* Manual source selection stays available. */ }
     }
     if (!activePdfUrl && found.length === 1) {
       activePdfUrl = found[0];
@@ -382,25 +497,28 @@ async function refreshActiveTab(thorough = false, rescan = false): Promise<void>
     }
   }
 
-  if (thorough && !activePdfUrl && candidates.length < 2 && url.startsWith("https:")) {
+  if (thorough && !paper && !activePdfUrl && candidates.length < 2 && url.startsWith("https:")) {
     try {
       const access = await requestHostAccess(url);
       if (!stillCurrent()) return;
       if (access) {
-        const isPdf = await probePdfContentType(url);
+        const pdf = await probePdfContentType(url);
         if (!stillCurrent()) return;
-        if (isPdf) activePdfUrl = url;
+        if (pdf) activePdfUrl = url;
       }
-    } catch { /* A protected/non-PDF URL is not a fatal error. */ }
+    } catch { /* Not a directly accessible PDF. */ }
   }
   if (!stillCurrent()) return;
   if (thorough) scanPerformed = true;
   renderSourceChooser();
   renderOverview();
   renderPaperState();
+  checkpointWorkspace();
   if (thorough) {
     if (filePermissionBlocked) showStatus("需要启用“允许访问文件网址”后才能读取本地 PDF。", true);
-    else if (activePdfUrl) showStatus("已找到 PDF。可以点击“分析”开始阅读。");
+    else if (paper || activePdfUrl) showStatus(paper
+      ? "已恢复当前论文，可以继续提问或查看卡片。"
+      : "已找到 PDF。可以点击“分析”开始阅读。");
     else if (candidates.length > 1) showStatus("找到 " + candidates.length + " 个候选 PDF，请选择。");
     else showStatus("未找到可直接获取的 PDF，可粘贴链接或选择本地文件。", true);
   }
@@ -423,6 +541,7 @@ function usePdfSource(url: string): void {
   filePermissionBlocked = false;
   scanPerformed = true;
   renderSourceChooser(); renderPaperState(); renderOverview();
+  checkpointWorkspace();
   showStatus("已选择 PDF。点击“分析”读取正文。");
 }
 
@@ -433,99 +552,163 @@ function currentRequest(prompt: string, json = false) {
     prompt, json
   };
 }
-async function summarize(): Promise<void> {
-  if (!paper || busy) return;
-  const targetPaper = paper;
-  setBusy(true); showStatus("正在整理研究问题、方法与证据……");
+async function summarizePaper(tabId: number, targetPaper: Paper): Promise<void> {
+  if (pendingTabs.has(tabId) || !workspaces.get(tabId)) return;
+  setBusy(true, tabId);
+  if (isCurrentPaper(tabId, targetPaper.id))
+    showStatus("正在整理研究问题、方法与证据……");
   try {
-    const raw = await generateText(currentRequest(overviewPrompt(targetPaper), true));
-    // The tab may change while the provider request is in flight.
-    if (paper !== targetPaper) return;
-    const nextDigest = parseDigest(raw, targetPaper.pages);
-    digest = nextDigest;
-    cardText.value = toMarkdown(targetPaper, nextDigest);
-    renderOverview(); renderPaperState(); setView("overview");
-    showStatus(nextDigest.findings.some(f => !f.verified)
-      ? "分析完成。部分结论没有可验证的原文片段，请人工核查。"
-      : "论文分析完成。");
+    // Capture the request before awaiting; provider changes in another tab
+    // must not redirect a running job or mix paper content.
+    const request = currentRequest(overviewPrompt(targetPaper), true);
+    const raw = await generateText(request);
+    const next = parseDigest(raw, targetPaper.pages);
+    const updated = await updatePaperResult(tabId, targetPaper.id, ws => {
+      ws.digest = next;
+      ws.view = "overview";
+    });
+    if (updated && isCurrentPaper(tabId, targetPaper.id)) {
+      setView("overview");
+      showStatus(next.findings.some(f => !f.verified)
+        ? "分析完成。部分原文位置未验证，请人工核查。"
+        : "分析完成。");
+    }
   } catch (error) {
-    if (paper === targetPaper)
+    if (isCurrentPaper(tabId, targetPaper.id))
       showStatus(error instanceof Error ? error.message : "分析失败，请重试。", true);
-  } finally { setBusy(false); }
+  } finally {
+    setBusy(false, tabId);
+  }
 }
+
+async function summarize(): Promise<void> {
+  if (!paper || activeTabId === undefined) return;
+  await summarizePaper(activeTabId, paper);
+}
+
+/** Store a loaded PDF in the originating tab, even if another tab is now active. */
+async function acceptParsedPaper(
+  tabId: number, loaded: Paper, expectedSource: string | null
+): Promise<boolean> {
+  const target = workspaces.get(tabId);
+  if (!target || (expectedSource !== null && target.selectedPdfUrl !== expectedSource))
+    return false;
+  target.selectedPdfUrl = expectedSource;
+  target.paper = loaded;
+  target.digest = null;
+  target.conversation = [];
+  target.draft = "";
+  target.view = "overview";
+  const pendingSave = workspaces.save(target);
+  if (activeTabId === tabId && (expectedSource === null || activePdfUrl === expectedSource)) {
+    activePdfUrl = expectedSource;
+    paper = loaded;
+    digest = null;
+    conversation = [];
+    askInput.value = "";
+    cardText.value = "";
+    renderSourceChooser();
+    renderOverview();
+    renderChat();
+    renderPaperState();
+  }
+  await pendingSave;
+  return true;
+}
+
 async function analyzeCurrent(): Promise<void> {
-  if (busy) return;
+  if (busy || activeTabId === undefined) return;
+  const tabId = activeTabId;
   if (!credentials.apiKey.trim()) {
     setView("settings");
     showStatus("先配置当前服务商的 API Key。");
     return;
   }
-  if (paper) { await summarize(); return; }
-  if (!activePdfUrl) {
-    showStatus("尚未选择 PDF。请点击重新检测、选择链接或打开本地文件。", true);
+  if (paper) {
+    await summarize();
     return;
   }
-  const url = activePdfUrl;
-  const tabId = activeTabId;
-  try {
-    if (!(await requestHostAccess(url))) {
-      filePermissionBlocked = url.startsWith("file:");
-      renderOverview();
-      throw new Error(filePermissionBlocked
-        ? "请到 Chrome 扩展详情页打开“允许访问文件网址”，再重新分析。"
-        : "需要先授权该 PDF 网站的读取权限。");
-    }
-    setBusy(true);
-    showStatus("正在提取 PDF 正文…");
-    const bytes = await fetchPdf(url);
-    const loaded = await parsePdf(bytes, url);
-    if (url !== activePdfUrl || tabId !== activeTabId)
-      throw new Error("检测到标签页发生变化，请重新分析。");
-    paper = loaded; digest = null; conversation = [];
-    renderOverview(); renderChat(); renderPaperState();
-  } catch (error) {
-    showStatus(error instanceof Error ? error.message : "无法读取该 PDF。可以选择本地文件。", true);
+  if (!activePdfUrl) {
+    showStatus("尚未选择 PDF。请重新检测、粘贴链接或打开本地文件。", true);
     return;
-  } finally { setBusy(false); }
-  await summarize();
+  }
+  const source = activePdfUrl;
+  let loaded: Paper | null = null;
+  setBusy(true, tabId);
+  try {
+    if (!(await requestHostAccess(source))) {
+      if (activeTabId === tabId) {
+        filePermissionBlocked = source.startsWith("file:");
+        renderOverview();
+      }
+      throw new Error(source.startsWith("file:")
+        ? "请在 Chrome 扩展详情页启用“允许访问文件网址”，再重新分析。"
+        : "需要先授权当前 PDF 网站的读取权限。");
+    }
+    const target = workspaces.get(tabId);
+    if (!target || target.selectedPdfUrl !== source) return;
+    if (activeTabId === tabId) showStatus("正在提取 PDF 正文……");
+    const bytes = await fetchPdf(source);
+    loaded = await parsePdf(bytes, source);
+    if (!(await acceptParsedPaper(tabId, loaded, source))) loaded = null;
+  } catch (error) {
+    if (activeTabId === tabId)
+      showStatus(error instanceof Error ? error.message : "无法读取 PDF。可以尝试选择已下载文件。", true);
+  } finally {
+    setBusy(false, tabId);
+  }
+  if (loaded) await summarizePaper(tabId, loaded);
 }
 
 async function openLocal(file: File): Promise<void> {
-  if (busy) return;
+  if (busy || activeTabId === undefined) return;
   const tabId = activeTabId;
-  setBusy(true); showStatus("正在读取本地 PDF……");
+  let loaded: Paper | null = null;
+  setBusy(true, tabId);
+  if (activeTabId === tabId) showStatus("正在读取本地 PDF……");
   try {
-    const loaded = await parsePdf(await file.arrayBuffer(), null);
-    if (tabId !== activeTabId) return;
+    loaded = await parsePdf(await file.arrayBuffer(), null);
     if (!loaded.title || loaded.title === "Untitled paper")
       loaded.title = file.name.replace(/\.pdf$/i, "");
-    paper = loaded;
-    digest = null; conversation = [];
-    renderOverview(); renderChat(); renderPaperState();
-    showStatus("PDF 已加载。正在准备生成概览……");
+    if (!(await acceptParsedPaper(tabId, loaded, null))) loaded = null;
   } catch (error) {
-    if (tabId === activeTabId)
+    if (activeTabId === tabId)
       showStatus(error instanceof Error ? error.message : "本地 PDF 加载失败。", true);
-    return;
-  } finally { setBusy(false); }
-  await summarize();
+  } finally {
+    setBusy(false, tabId);
+  }
+  if (loaded) await summarizePaper(tabId, loaded);
 }
+
 async function ask(question: string): Promise<void> {
-  if (!paper || busy) { showStatus("请先分析或加载当前论文。", true); return; }
+  if (!paper || busy || activeTabId === undefined) {
+    showStatus("请先分析或加载当前论文。", true);
+    return;
+  }
+  const tabId = activeTabId;
   const targetPaper = paper;
   const history = conversation.slice(-6);
   conversation.push({ role: "user", text: question });
-  renderChat(); setView("ask"); setBusy(true); showStatus("正在基于当前论文回答……");
+  checkpointWorkspace();
+  renderChat();
+  setView("ask");
+  setBusy(true, tabId);
+  showStatus("正在基于当前论文回答……");
   try {
-    const answer = await generateText(currentRequest(askPrompt(targetPaper, question, history)));
-    if (paper !== targetPaper) return; // Never show a former paper's answer in another tab.
-    conversation.push({ role: "assistant", text: answer });
-    renderChat(); showStatus("");
+    const request = currentRequest(askPrompt(targetPaper, question, history));
+    const answer = await generateText(request);
+    const updated = await updatePaperResult(tabId, targetPaper.id, ws => {
+      ws.conversation.push({ role: "assistant", text: answer });
+    });
+    if (updated && isCurrentPaper(tabId, targetPaper.id)) showStatus("");
   } catch (error) {
-    if (paper === targetPaper)
+    if (isCurrentPaper(tabId, targetPaper.id))
       showStatus(error instanceof Error ? error.message : "提问失败。", true);
-  } finally { setBusy(false); }
+  } finally {
+    setBusy(false, tabId);
+  }
 }
+
 function selectedModel(): string {
   return modelSelect.value === "__custom__" ? modelInput.value.trim() : modelSelect.value;
 }
@@ -624,10 +807,12 @@ async function acceptSelection(): Promise<void> {
       Date.now() - selection.at > 5 * 60_000) return;
   if (selection.tabId !== activeTabId ||
       (candidatePdfUrl(selection.url) !== activePdfUrl && tabIdentity(selection.url) !== tabUrl)) return;
+  const selectedTabId = activeTabId;
   askInput.value = "请解释论文中选中的这段话，并联系上下文：\n\n“" +
     selection.text.slice(0, 1600) + "”";
+  checkpointWorkspace();
   await chrome.storage.session.remove("paperpeek.selection");
-  setView("ask");
+  if (activeTabId === selectedTabId) setView("ask");
 }
 document.querySelectorAll<HTMLButtonElement>(".tab").forEach(tab => {
   tab.addEventListener("click", () => setView(tab.dataset.tab || "overview"));
@@ -702,6 +887,11 @@ askInput.addEventListener("keydown", event => {
   if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
     event.preventDefault(); askForm.requestSubmit();
   }
+});
+askInput.addEventListener("input", () => {
+  // Persist unsent questions too; tab switches force an immediate checkpoint.
+  if (draftSaveTimer) clearTimeout(draftSaveTimer);
+  draftSaveTimer = setTimeout(() => checkpointWorkspace(), 350);
 });
 
 providerInput.addEventListener("change", () => {
@@ -785,6 +975,23 @@ chrome.tabs.onUpdated.addListener((tabId, info) => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "session" && changes["paperpeek.selection"]) void acceptSelection();
 });
+chrome.tabs.onRemoved.addListener(tabId => {
+  pendingTabs.delete(tabId);
+  void workspaces.close(tabId).catch(() => undefined);
+  if (activeTabId === tabId) {
+    // The document was closed: discard the dead tab without checkpointing it.
+    if (draftSaveTimer) clearTimeout(draftSaveTimer);
+    activeTabId = undefined;
+    tabUrl = "";
+    activePdfUrl = null;
+    paper = null;
+    digest = null;
+    conversation = [];
+    askInput.value = "";
+    cardText.value = "";
+    void refreshActiveTab();
+  }
+});
 
 async function init(): Promise<void> {
   try {
@@ -797,6 +1004,7 @@ async function init(): Promise<void> {
   }
   renderOverview();
   renderChat();
-  setView("overview");
+  // The last reading destination is scoped to the restored tab.
+  setView(lastReadingView);
 }
 void init();
