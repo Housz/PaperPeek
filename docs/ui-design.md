@@ -7,7 +7,7 @@
 1. User opens any PDF or an HTML page containing PDF links.
 2. A **single topbar** shows the current source, re-detection, local upload, Analyze and settings. Re-detection is always available.
 3. If no direct PDF is recognized, PaperPeek inspects page links/embeds; explicit re-detection may inspect response MIME/signature. If several candidates, user chooses one; manual URL/file is the fallback.
-4. If viewing a local \`file://\` PDF without permission, display "allow file URLs" instructions and link to extension details.
+4. If viewing a local `file://` PDF without permission, display "allow file URLs" instructions and link to extension details.
 5. First use: select provider and configure API Key; official OpenAI/DeepSeek model options fetched from their own API; custom ID remains available. Gemini is manual for this iteration.
 6. Overview presents research problem, approach, evidence-backed findings and limitations.
 7. Ask: free-form question or choose from six scientific prompt presets; bilingual terminology is used on first occurrence where feasible.
