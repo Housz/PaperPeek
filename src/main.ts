@@ -113,6 +113,7 @@ function setBusy(value: boolean, tabId = activeTabId): void {
   uploadBtn.disabled = value;
   emptyAction.disabled = value;
   sourceChooseBtn.disabled = value;
+  renderPaperState();
 }
 function setView(view: string): void {
   currentView = view;
@@ -288,7 +289,7 @@ function renderPaperState(): void {
     ? paper.totalPages + " 页" + (paper.truncated ? " · 文本已截断" : "")
     : activePdfUrl || "";
   paperState.hidden = !hasPaper || currentView === "settings";
-  paperState.textContent = digest ? "已分析" : paper ? "已读取" : "待分析";
+  paperState.textContent = busy ? "处理中" : digest ? "已分析" : paper ? "已读取" : "待分析";
   analyzeBtn.hidden = currentView === "settings" || !hasPaper;
   analyzeBtn.textContent = !credentials.apiKey.trim() ? "设置" :
     digest ? "重新分析" : "分析";
