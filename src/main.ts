@@ -173,6 +173,7 @@ function checkpointWorkspace(): void {
 }
 
 function restoreWorkspace(state: TabWorkspace): void {
+  const keepSettings = currentView === "settings";
   restoringWorkspace = true;
   try {
     activePdfUrl = state.selectedPdfUrl;
@@ -187,7 +188,7 @@ function restoreWorkspace(state: TabWorkspace): void {
     renderSourceChooser();
     renderOverview();
     renderChat();
-    setView(state.view);
+    setView(keepSettings ? "settings" : state.view);
     setBusy(pendingTabs.has(state.tabId), state.tabId);
   } finally {
     restoringWorkspace = false;
@@ -802,10 +803,12 @@ async function acceptSelection(): Promise<void> {
       Date.now() - selection.at > 5 * 60_000) return;
   if (selection.tabId !== activeTabId ||
       (candidatePdfUrl(selection.url) !== activePdfUrl && tabIdentity(selection.url) !== tabUrl)) return;
+  const selectedTabId = activeTabId;
   askInput.value = "请解释论文中选中的这段话，并联系上下文：\n\n“" +
     selection.text.slice(0, 1600) + "”";
+  checkpointWorkspace();
   await chrome.storage.session.remove("paperpeek.selection");
-  setView("ask");
+  if (activeTabId === selectedTabId) setView("ask");
 }
 document.querySelectorAll<HTMLButtonElement>(".tab").forEach(tab => {
   tab.addEventListener("click", () => setView(tab.dataset.tab || "overview"));
