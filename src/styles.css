@@ -216,6 +216,10 @@ textarea::placeholder, input::placeholder { color: var(--faint); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; white-space: nowrap;
   clip: rect(0,0,0,0); clip-path: inset(50%); }
 
+/* On narrow Side Panels, the active model matters more than the paper-state label. */
+@media (max-width: 400px) {
+  .paper-state { display: none; }
+}
 @media (max-width: 340px) {
   .topbar { padding-inline: var(--s3); gap: 4px; }
   .header-actions { gap: 0; }
