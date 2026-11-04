@@ -12,6 +12,11 @@ All notable changes are recorded here. Versions follow semantic versioning for M
 - Remove a closed tab's cached paper data using `tabs.onRemoved`, without affecting other research tabs.
 - Replace the sun-like Settings glyph with an unambiguous gear.
 
+### Delivery and model status
+- Show the currently configured AI provider and model ID in the existing compact header; preserve the full ID in the tooltip on narrow Side Panels.
+- Add automated **GitHub Releases** publishing from a tested `main` commit, with an installable ZIP and SHA-256 checksum. Version remains **v0.1.4**.
+- Stop relying on temporary conversation file links as the recommended installation channel.
+
 ### Quality
 - Add compressed per-tab Chrome `storage.session` persistence with ordered writes and 10 MiB quota awareness.
 - Add per-tab lifecycle and Side Panel DOM integration tests for common researcher workflows.

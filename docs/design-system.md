@@ -86,3 +86,9 @@ Update `sidepanel.html`, `src/styles.css`, `src/main.ts`, `docs/ui-design.md`, t
 Settings is a conventional toothed gear (not a sun, brightness, appearance icon). Keep `aria-label="模型设置"` and `data-icon="settings"` in the SVG. The topbar contains source detection, file picker, Analyze and this one Settings action. Never use theme iconography to indicate model configuration.
 
 When returning to a previously analyzed tab, show its last reading view and existing content without a large empty-state flash. Keep the 65px single header and visible focus styles.
+
+## Model status in compact header (v0.1.4)
+
+The existing `.header-brand` row includes the provider and *exact* active model ID in `#modelStatus`, for example `OpenAI · gpt-4.1-mini`. This is the model selected for **new requests**, not a provenance label on previous answers. The label updates on settings save and does **not** expose the API Key.
+
+The Side Panel may be only 280–360px wide. Model label uses ellipsis (`text-overflow: ellipsis`), and the tooltip holds the full provider, model and whether a key is configured. Below 400px, redundant paper-state text is visually hidden to make room for the model label. **Do not add a second header or status bar** to show model metadata.

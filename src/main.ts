@@ -27,6 +27,7 @@ const byId = <T extends HTMLElement = HTMLElement>(id: string): T => {
 const paperTitle = byId("paperTitle");
 const paperSubtitle = byId("paperSubtitle");
 const paperState = byId("paperState");
+const modelStatus = byId("modelStatus");
 const primaryTabs = byId("primaryTabs");
 const settingsToggle = byId<HTMLButtonElement>("settingsToggle");
 const settingsBack = byId<HTMLButtonElement>("settingsBack");
@@ -290,6 +291,13 @@ function renderPaperState(): void {
     : activePdfUrl || "";
   paperState.hidden = !hasPaper || currentView === "settings";
   paperState.textContent = busy ? "处理中" : digest ? "已分析" : paper ? "已读取" : "待分析";
+  const providerNames: Record<Provider, string> = {
+    deepseek: "DeepSeek", openai: "OpenAI", gemini: "Gemini"
+  };
+  const label = providerNames[credentials.provider] + " · " + (credentials.model || "未选模型");
+  modelStatus.textContent = label;
+  modelStatus.title = "当前用于新请求的模型：" + label +
+    (credentials.apiKey.trim() ? "" : "（尚未配置 API Key）");
   analyzeBtn.hidden = currentView === "settings" || !hasPaper;
   analyzeBtn.textContent = !credentials.apiKey.trim() ? "设置" :
     digest ? "重新分析" : "分析";

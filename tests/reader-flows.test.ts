@@ -212,6 +212,8 @@ describe("reader journeys (actual Side Panel DOM with mocked Chrome/API)", () =>
     click("settingsBack");
     expect(byId("view-ask").hidden).toBe(false);
     expect(byId<HTMLTextAreaElement>("cardText").value).toContain("Paper A");
+    expect(byId("modelStatus").textContent).toBe("DeepSeek · deepseek-flash");
+    expect(byId("modelStatus").title).toContain("当前用于新请求的模型");
   });
 
   it("keeps a delayed Q&A response with the original tab, not the current tab", async () => {
@@ -240,6 +242,23 @@ describe("reader journeys (actual Side Panel DOM with mocked Chrome/API)", () =>
     setTab(102, "https://arxiv.org/pdf/2601.00002");
     await vi.waitFor(() => expect(byId("paperTitle").textContent).toContain("2601.00002"));
     expect(document.querySelector(".message.assistant")).toBeNull();
+  });
+
+  it("shows the exact saved model ID in the shared top-header status", async () => {
+    await mountSidePanel();
+    await vi.waitFor(() =>
+      expect(byId("modelStatus").textContent).toBe("DeepSeek · deepseek-flash"));
+    click("settingsToggle");
+    const picker = byId<HTMLSelectElement>("modelSelect");
+    picker.value = "__custom__";
+    picker.dispatchEvent(new Event("change", { bubbles: true }));
+    const modelId = byId<HTMLInputElement>("modelInput");
+    modelId.value = "deepseek-v4-pro";
+    byId<HTMLFormElement>("settingsForm").dispatchEvent(
+      new Event("submit", { bubbles: true, cancelable: true }));
+    await vi.waitFor(() =>
+      expect(byId("modelStatus").textContent).toBe("DeepSeek · deepseek-v4-pro"));
+    expect(byId("modelStatus").title).toContain("deepseek-v4-pro");
   });
 
 });

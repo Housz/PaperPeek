@@ -1,0 +1,106 @@
+name: Publish Chrome extension Release
+
+# A merged version is released once. Every future release requires a new
+# package.json/manifest.json version and matching release notes.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: paperpeek-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout verified source
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate release metadata
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p 'require("./package.json").version')"
+          MANIFEST_VERSION="$(node -p 'require("./public/manifest.json").version')"
+          test "$VERSION" = "$MANIFEST_VERSION"
+          test -s "docs/releases/v${VERSION}.md"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Do not overwrite a published version
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Release $TAG already exists. Bump the version to publish new binaries."
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install project dependencies
+        if: steps.gate.outputs.publish == 'true'
+        run: npm install --legacy-peer-deps --no-audit --no-fund
+      - name: TypeScript check
+        if: steps.gate.outputs.publish == 'true'
+        run: npm run check
+      - name: Unit and Side Panel workflow tests
+        if: steps.gate.outputs.publish == 'true'
+        run: npm test
+      - name: Build extension
+        if: steps.gate.outputs.publish == 'true'
+        run: npm run build
+
+      - name: Package installable extension and checksum
+        if: steps.gate.outputs.publish == 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s dist/manifest.json
+          test -s dist/sidepanel.html
+          test -s dist/assets/background.js
+          node -e 'const p=require("./dist/manifest.json");if(p.version!==process.env.VERSION) process.exit(1)'
+          ZIP_NAME="PaperPeek-${TAG}-chrome.zip"
+          (cd dist && zip -q -r "$GITHUB_WORKSPACE/$ZIP_NAME" .)
+          unzip -Z1 "$ZIP_NAME" | grep -qx 'manifest.json'
+          unzip -Z1 "$ZIP_NAME" | grep -qx 'sidepanel.html'
+          sha256sum "$ZIP_NAME" > SHA256SUMS.txt
+          echo "Archive: $ZIP_NAME"
+          cat SHA256SUMS.txt
+
+      - name: Publish GitHub Release (experimental MVP)
+        if: steps.gate.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP_NAME="PaperPeek-${TAG}-chrome.zip"
+          gh release create "$TAG" "$ZIP_NAME" SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "PaperPeek $TAG" \
+            --notes-file "docs/releases/${TAG}.md" \
+            --prerelease --latest=false
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets,url \
+            --jq '{url,assets:[.assets[].name]}'
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets \
+            --jq '.assets[].name' | grep -qx "$ZIP_NAME"

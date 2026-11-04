@@ -23,7 +23,10 @@ Do not add heavy framework/SDK by default. The UI is vanilla TypeScript + CSS fo
 
 For each PR: update requirements for behavior, architecture/ADR for trade-offs, user guide for workflows, testing for new cases, security for new data flows, CHANGELOG for user-visible changes, AGENTS for changed invariant. Mention if any checklist step was not run.
 
-## Release checklist
+## Release checklist (GitHub Releases are the authoritative download channel)
+
+Follow [docs/releasing.md](releasing.md). A release must be built by GitHub Actions from a merged `main` commit and published with a direct ZIP asset and checksum. Do not share a chat sandbox ZIP as the primary installation file.
+
 
 1. `npm run check` and `npm test` pass.
 2. `npm run build` produces `dist/manifest.json`, `dist/sidepanel.html`, `dist/assets/background.js` and bundled PDF.js worker.
@@ -42,3 +45,7 @@ Patch for bugs and docs; minor for new reading/export feature; release notes mus
 - Provider metadata discovery is in `src/lib/provider.ts`; only fixed official endpoints and sanitized errors.
 - Key persistence is per provider in `src/lib/storage.ts`; never revert to one shared key.
 - Scientific prompt templates are maintained in `src/lib/prompts.ts` and `docs/prompts.md`, with version bump and regression tests.
+
+## Release automation (v0.1.4)
+
+`release.yml` runs after merge to `main` or via manual workflow dispatch. It reads the package and Manifest version, checks the matching release notes, repeats type/test/build, packages a root-manifest Chrome ZIP, generates SHA256SUMS and publishes a GitHub **pre-release**. An already published version is skipped; bump the version for future updates. Run `tests/release.test.ts` after changing release CI. CI uses GitHub's repository token only, not API keys from model vendors.

@@ -73,7 +73,19 @@ summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .brand-mark { color: var(--primary); width: 16px; height: 16px; display: inline-grid; place-items: center; flex: none; }
 .brand-mark svg { width: 16px; height: 16px; }
 .brand-name { font-size: 11px; font-weight: 650; color: var(--muted); white-space: nowrap; }
-.paper-state { color: var(--faint); font-size: 10px; padding-left: 5px; }
+/* Current model lives inside the existing single header, not a second toolbar.
+   Keep the complete provider and model ID in the tooltip on narrow panels. */
+.model-status {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.paper-state { color: var(--faint); font-size: 10px; padding-left: 4px; white-space: nowrap; flex-shrink: 0; }
 .header-paper-title { font-size: 13.5px; font-weight: 650; line-height: 1.35; margin: 2px 0 0; display: block;
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .header-subtitle { display: none; }
@@ -204,6 +216,10 @@ textarea::placeholder, input::placeholder { color: var(--faint); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; white-space: nowrap;
   clip: rect(0,0,0,0); clip-path: inset(50%); }
 
+/* On narrow Side Panels, the active model matters more than the paper-state label. */
+@media (max-width: 400px) {
+  .paper-state { display: none; }
+}
 @media (max-width: 340px) {
   .topbar { padding-inline: var(--s3); gap: 4px; }
   .header-actions { gap: 0; }

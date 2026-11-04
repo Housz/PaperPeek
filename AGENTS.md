@@ -16,8 +16,9 @@ Version v0.1.4 is a **single current-PDF** reading helper with structure-focused
 3. `docs/security.md` — key storage, network, untrusted PDF
 4. `docs/testing.md` — automated/manual acceptance
 5. `docs/roadmap.md` — future-only ideas, not current functionality
-7. `docs/design-system.md` — UI tokens, navigation and interaction contract
-6. `docs/verification.md` — tested status and explicit browser/API test gaps
+6. `docs/design-system.md` — UI tokens, navigation and interaction contract
+7. `docs/verification.md` — tested status and explicit browser/API test gaps
+8. `docs/releasing.md` — GitHub Release workflow, build asset and version rules
 
 ## Code map
 
@@ -34,7 +35,8 @@ Version v0.1.4 is a **single current-PDF** reading helper with structure-focused
 - `src/lib/storage.ts` per-provider BYOK profiles, opt-in persistent keys, legacy migration
 - `src/lib/tab-workspace.ts` compressed per-tab ephemeral research state; must never contain API keys
 - `tests/` deterministic unit tests; no real API credentials
-- `.github/workflows/ci.yml` checks and packaged extension build
+- `.github/workflows/ci.yml` checks and per-version CI artifact
+- `.github/workflows/release.yml` release-only build/test/package/tag/publish (main branch)
 
 ## Invariants — DO NOT BREAK
 
@@ -51,6 +53,7 @@ Version v0.1.4 is a **single current-PDF** reading helper with structure-focused
 
 - Create feature branch and small PR; link it to issue, affected documents and reproducible tests.
 - Update docs + CHANGELOG for any user-visible feature or limitation.
+- **Deliver installable ZIPs via GitHub Releases**, not ephemeral chat attachments or Actions artifacts. Read `docs/releasing.md` before promising a download. Never publish an unmerged PR as a release; after the version bump is merged, inspect the successful release workflow and confirm assets appear.
 - Run `npm run check && npm test && npm run build` and check CI status.
 - Manually verify `docs/testing.md` with arXiv sample and an authorized BYOK key **outside CI and public logs**.
 - Pay attention to consent/permissions, Chrome sidePanel behavior, tokenizer/context truncation, model error states, and PDF source switching.
@@ -70,3 +73,8 @@ Write an ADR in `docs/decisions/` for migration to MIME Handler, PDF.js viewer, 
 ## v0.1.4 handoff note
 
 Run `tests/tab-workspace.test.ts` and `tests/reader-flows.test.ts` after modifying tab activation, state snapshots, async model tasks, model selection, PDF citation navigation, or Side Panel reopening. The workspaces live in `chrome.storage.session` and are cleared on browser restart/extension reload; do not silently turn them into an archival local database. Verify no API credentials enter the workspace snapshot. Follow `docs/tab-sessions.md`.
+
+## v0.1.4 model-status/release invariant
+
+- Keep a single topbar. `modelStatus` must show the active provider and exact model ID **used for new requests**, updating after settings save, and preserve a full tooltip on narrow sidebars. Do not disclose credentials.
+- Changes to GitHub Release automation require `tests/release.test.ts`, full CI and a successful release workflow. Do not silently replace a published tag/asset; bump version for future releases. Update README with verified GitHub release link.
