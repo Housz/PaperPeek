@@ -30,3 +30,11 @@ Client-only BYOK is not equivalent to a backend secret management solution. Pass
 - Per-provider API Keys are distinct. A secret can only be durably saved by opt-in. Chrome local storage is **not encrypted**, and clearing the extension's key does not revoke a leaked provider key.
 - Do not log model list responses containing user data or HTTP request headers. Model list is from fixed official API endpoints, not arbitrary remote endpoint values.
 - Keep file URL, embedded HTML, dynamic PDF and prompt-injection regressions in CI and manual privacy review.
+
+## v0.1.4 temporary paper session storage
+
+- Research text, digest and Q&A are cached **in memory** through `chrome.storage.session` per Chrome tab while the browser and extension session remain active. This enables tab switching and Side Panel reopening without repeated PDF uploads or LLM calls.
+- Gzip packing is only a quota optimization, **not encryption**. Workspaces are only accessible to trusted extension contexts by default; credentials continue to live in their separate BYOK storage keys and must never be included in `TabWorkspace`.
+- `tabs.onRemoved` deletes the closed tab's workspace. The extension does not create a permanent paper archive, and browser restart/extension reload clears Chrome session storage.
+- PDF source URLs may contain filenames or query strings. They stay local to the browser session; never transmit local `file://` paths in LLM prompts.
+- If session storage quota is exhausted, display a warning and advise copying Markdown; never silently claim persistence succeeded.
