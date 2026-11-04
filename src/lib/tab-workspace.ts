@@ -167,3 +167,53 @@ export async function removeTabWorkspace(tabId: number): Promise<void> {
   await queue.get(tabId)?.catch(() => undefined);
   await chrome.storage.session.remove(workspaceKey(tabId));
 }
+
+
+/** Per-Side-Panel memory map. The backing store outlives panel closure. */
+export class TabWorkspaceManager {
+  private readonly cache = new Map<number, TabWorkspace>();
+
+  async open(tabId: number, url: string): Promise<TabWorkspace> {
+    const stored = this.cache.get(tabId) || await loadTabWorkspace(tabId, url);
+    let workspace: TabWorkspace;
+    if (stored && workspaceMatchesTab(stored, url)) {
+      workspace = stored;
+      workspace.tabUrl = documentIdentity(url);
+    } else {
+      if (stored) await removeTabWorkspace(tabId);
+      workspace = blankWorkspace(tabId, url);
+    }
+    this.cache.set(tabId, workspace);
+    return workspace;
+  }
+
+  get(tabId: number): TabWorkspace | undefined {
+    return this.cache.get(tabId);
+  }
+
+  /**
+   * Returns the save promise so tests and callers can await a durable checkpoint.
+   * Cached workspace is available immediately for tab switching.
+   */
+  save(workspace: TabWorkspace): Promise<void> {
+    this.cache.set(workspace.tabId, workspace);
+    return saveTabWorkspace(workspace);
+  }
+
+  /** Apply results to the originating paper even if another tab is now active. */
+  updatePaper(
+    tabId: number,
+    paperId: string,
+    update: (workspace: TabWorkspace) => void
+  ): Promise<boolean> {
+    const workspace = this.cache.get(tabId);
+    if (!workspace || workspace.paper?.id !== paperId) return Promise.resolve(false);
+    update(workspace);
+    return this.save(workspace).then(() => true);
+  }
+
+  async close(tabId: number): Promise<void> {
+    this.cache.delete(tabId);
+    await removeTabWorkspace(tabId);
+  }
+}
