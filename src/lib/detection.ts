@@ -28,7 +28,7 @@ export function collectDocumentCandidates(): string[] {
     const path = (() => { try { return new URL(url, document.baseURI).pathname; } catch { return ""; } })();
     if (/application\/pdf/i.test(type)
       || /\.pdf$/i.test(path)
-      || /^(?:download\s*)?pdf(?:\s*full[\s-]*text)?$/i.test(label)
+      || /^(?:(?:download|full[\s-]*text)\s*)?pdf(?:\s*(?:full[\s-]*text|download))?$/i.test(label)
       || /\/(?:pdf|download-pdf)(?:\/|$)/i.test(path)
       || /\b(?:format|download|type)=pdf\b/i.test(url)) add(url);
   };
@@ -41,7 +41,7 @@ export function collectDocumentCandidates(): string[] {
     test(value, "", item.getAttribute("type") || "");
   }
   for (const link of document.querySelectorAll<HTMLAnchorElement>("a[href], link[href]")) {
-    const text = (link.textContent || link.getAttribute("aria-label") || "").trim().slice(0, 100);
+    const text = (link.textContent?.trim() || link.getAttribute("aria-label")?.trim() || "").slice(0, 100);
     test(link.href, text, link.getAttribute("type") || "");
   }
   return [...new Set(candidates)].slice(0, 24);
