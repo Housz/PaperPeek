@@ -14,6 +14,10 @@ import {
 import {
   forgetProviderKey, loadCredentials, saveCredentials, type Credentials
 } from "./lib/storage";
+import {
+  TabWorkspaceManager, blankWorkspace, workspaceMatchesTab,
+  documentIdentity, type TabWorkspace, type ReadingView
+} from "./lib/tab-workspace";
 
 const byId = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const element = document.getElementById(id);
@@ -63,8 +67,12 @@ const settingsForm = byId<HTMLFormElement>("settingsForm");
 const testBtn = byId<HTMLButtonElement>("testBtn");
 const clearKeyBtn = byId<HTMLButtonElement>("clearKeyBtn");
 
+const workspaces = new TabWorkspaceManager();
+const pendingTabs = new Set<number>();
 let activeTabId: number | undefined;
 let tabUrl = "";
+let restoringWorkspace = false;
+let draftSaveTimer: ReturnType<typeof setTimeout> | undefined;
 let activePdfUrl: string | null = null;
 let candidates: string[] = [];
 let scanPerformed = false;
@@ -90,7 +98,12 @@ function showStatus(message: string, error = false): void {
   status.textContent = message;
   status.className = error ? "status status-error" : "status";
 }
-function setBusy(value: boolean): void {
+function setBusy(value: boolean, tabId = activeTabId): void {
+  if (tabId !== undefined) {
+    if (value) pendingTabs.add(tabId);
+    else pendingTabs.delete(tabId);
+  }
+  if (tabId !== activeTabId) return;
   busy = value;
   analyzeBtn.disabled = value;
   detectBtn.disabled = value;
@@ -117,6 +130,7 @@ function setView(view: string): void {
     el.tabIndex = selected ? 0 : -1;
   });
   renderPaperState();
+  checkpointWorkspace();
 }
 function create<K extends keyof HTMLElementTagNameMap>(
   tag: K, className = "", text = ""
@@ -125,6 +139,81 @@ function create<K extends keyof HTMLElementTagNameMap>(
   if (className) element.className = className;
   if (text) element.textContent = text;
   return element;
+}
+
+
+/** Snapshot only the active tab's reading data. No provider credentials. */
+function currentWorkspaceSnapshot(): TabWorkspace | null {
+  if (activeTabId === undefined) return null;
+  const existing = workspaces.get(activeTabId) || blankWorkspace(activeTabId, tabUrl);
+  return {
+    ...existing,
+    tabUrl,
+    selectedPdfUrl: activePdfUrl,
+    candidates: [...candidates],
+    scanPerformed,
+    paper,
+    digest,
+    conversation: conversation.map(message => ({ ...message })),
+    draft: askInput.value,
+    view: lastReadingView === "ask" || lastReadingView === "card"
+      ? lastReadingView : "overview"
+  };
+}
+
+/** Updates are queued in storage.session; switching tabs never discards a snapshot. */
+function checkpointWorkspace(): void {
+  if (restoringWorkspace || activeTabId === undefined) return;
+  const snapshot = currentWorkspaceSnapshot();
+  if (!snapshot) return;
+  void workspaces.save(snapshot).catch(() => {
+    if (activeTabId === snapshot.tabId)
+      showStatus("临时会话保存失败。请复制重要结果，或关闭其他论文标签后重试。", true);
+  });
+}
+
+function restoreWorkspace(state: TabWorkspace): void {
+  restoringWorkspace = true;
+  try {
+    activePdfUrl = state.selectedPdfUrl;
+    candidates = [...state.candidates];
+    scanPerformed = state.scanPerformed;
+    paper = state.paper;
+    digest = state.digest;
+    conversation = state.conversation.map(item => ({ ...item }));
+    askInput.value = state.draft;
+    cardText.value = paper && digest ? toMarkdown(paper, digest) : "";
+    lastReadingView = state.view;
+    renderSourceChooser();
+    renderOverview();
+    renderChat();
+    setView(state.view);
+    setBusy(pendingTabs.has(state.tabId), state.tabId);
+  } finally {
+    restoringWorkspace = false;
+  }
+}
+
+function isCurrentPaper(tabId: number, paperId: string): boolean {
+  return activeTabId === tabId && paper?.id === paperId;
+}
+
+/** When an AI call finishes after a tab switch, keep its result in its original tab. */
+async function updatePaperResult(
+  tabId: number, paperId: string, update: (workspace: TabWorkspace) => void
+): Promise<boolean> {
+  const exists = await workspaces.updatePaper(tabId, paperId, update);
+  if (!exists) return false;
+  if (isCurrentPaper(tabId, paperId)) {
+    const saved = workspaces.get(tabId)!;
+    digest = saved.digest;
+    conversation = [...saved.conversation];
+    cardText.value = paper && digest ? toMarkdown(paper, digest) : "";
+    renderOverview();
+    renderChat();
+    renderPaperState();
+  }
+  return true;
 }
 
 function renderSourceChooser(): void {
