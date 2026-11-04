@@ -192,4 +192,54 @@ describe("reader journeys (actual Side Panel DOM with mocked Chrome/API)", () =>
     expect(byId("overviewContent").hidden).toBe(true);
     expect(byId<HTMLTextAreaElement>("cardText").value).toBe("");
   });
+
+  it("keeps paper work through citation jumps and opening model settings", async () => {
+    await mountSidePanel();
+    await vi.waitFor(() => expect(byId("paperTitle").textContent).toContain("2601.00001"));
+    click("analyzeBtn");
+    await analyzed();
+    const citation = document.querySelector<HTMLButtonElement>(".digest-section .page-link");
+    expect(citation).not.toBeNull();
+    citation!.click();
+    await vi.waitFor(() => expect(activeTab.url).toContain("#page=2"));
+    expect(byId("overviewContent").hidden).toBe(false);
+    expect(byId<HTMLTextAreaElement>("cardText").value).toContain("Paper A");
+
+    click("tab-ask");
+    click("settingsToggle");
+    expect(byId("view-settings").hidden).toBe(false);
+    expect(document.querySelector('svg[data-icon="settings"]')).not.toBeNull();
+    click("settingsBack");
+    expect(byId("view-ask").hidden).toBe(false);
+    expect(byId<HTMLTextAreaElement>("cardText").value).toContain("Paper A");
+  });
+
+  it("keeps a delayed Q&A response with the original tab, not the current tab", async () => {
+    let complete!: (value: string) => void;
+    mock.generate.mockImplementation(({ prompt }: { prompt: string }) =>
+      prompt.includes('"tldr"') ? Promise.resolve(digest)
+        : new Promise<string>(resolve => { complete = resolve; }));
+    await mountSidePanel();
+    await vi.waitFor(() => expect(byId("paperTitle").textContent).toContain("2601.00001"));
+    click("analyzeBtn");
+    await analyzed();
+    click("tab-ask");
+    byId<HTMLTextAreaElement>("askInput").value = "Explain this experiment";
+    byId<HTMLFormElement>("askForm").dispatchEvent(
+      new Event("submit", { bubbles: true, cancelable: true })
+    );
+    await vi.waitFor(() => expect(complete).toBeTypeOf("function"));
+    setTab(102, "https://arxiv.org/pdf/2601.00002");
+    await vi.waitFor(() => expect(byId("paperTitle").textContent).toContain("2601.00002"));
+    complete("A's completed explanation");
+    setTab(101, "https://arxiv.org/pdf/2601.00001");
+    await vi.waitFor(() =>
+      expect(document.querySelector(".message.assistant")?.textContent)
+        .toContain("A's completed explanation")
+    );
+    setTab(102, "https://arxiv.org/pdf/2601.00002");
+    await vi.waitFor(() => expect(byId("paperTitle").textContent).toContain("2601.00002"));
+    expect(document.querySelector(".message.assistant")).toBeNull();
+  });
+
 });
