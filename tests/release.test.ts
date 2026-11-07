@@ -8,8 +8,8 @@ const manifest = JSON.parse(file("public/manifest.json")) as { version: string }
 const pkg = JSON.parse(file("package.json")) as { version: string };
 
 describe("GitHub Release publishing contract", () => {
-  it("keeps the published version at v0.1.4 in both manifests", () => {
-    expect(pkg.version).toBe("0.1.4");
+  it("keeps the published version at v0.1.5 in both manifests", () => {
+    expect(pkg.version).toBe("0.1.5");
     expect(manifest.version).toBe(pkg.version);
   });
 
@@ -28,6 +28,7 @@ describe("GitHub Release publishing contract", () => {
     expect(workflow).toContain("npm run build");
     expect(workflow).toContain('test -s dist/manifest.json');
     expect(workflow).toContain("unzip -Z1");
+    expect(workflow).toContain('dist/icons/icon${size}.png');
     expect(workflow).toContain("sha256sum");
     expect(workflow).toContain("gh release create");
   });
@@ -41,6 +42,6 @@ describe("GitHub Release publishing contract", () => {
     expect(workflow).toContain("paperpeek/release-assets");
     expect(workflow).toContain('gh release view "$TAG"');
     expect(workflow).toContain("docs/releases/");
-    expect(file("docs/releases/v0.1.4.md")).toContain("PaperPeek-v0.1.4-chrome.zip");
+    expect(file("docs/releases/v0.1.5.md")).toContain("PaperPeek-v0.1.5-chrome.zip");
   });
 });

@@ -2,6 +2,22 @@
 
 All notable changes are recorded here. Versions follow semantic versioning for MVP milestones.
 
+## [0.1.5] - 2026-11-07
+
+### Fixed
+- **[#7](https://github.com/Housz/PaperPeek/issues/7):** Render model responses using a locally bundled Markdown parser. Support headings, bold, lists, tables, blockquotes and fenced code instead of displaying raw Markdown markers.
+- Show Paper Card as formatted Markdown by default; provide a "查看源码" toggle while keeping copy/download of the original Markdown byte-for-byte unchanged.
+- Preserve clickable, explicitly unverified PDF page hints in formatted model responses; prevent markup in code blocks from becoming navigation buttons.
+
+### Changed
+- **[#11](https://github.com/Housz/PaperPeek/issues/11):** Adopt the original transparent 16/32/48/128px PNG logo assets from the owner's asset branch in the Chrome Manifest V3 toolbar/default icons and install bundle.
+- Enforce safe untrusted Markdown rendering: raw HTML disabled, remote images disabled, and only safe HTTP(S) links; pin patched markdown-it 15.0.3.
+- Require all four PNG assets in the GitHub CI build and Release ZIP checks.
+
+### Quality
+- Markdown security/formatting, DOM interaction, icon asset/transparency and versioned GitHub Release checks.
+- Existing single-PDF, BYOK and per-tab session contracts remain unchanged.
+
 ## [0.1.4] - 2026-11-04
 
 ### Fixed

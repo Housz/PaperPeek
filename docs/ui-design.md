@@ -1,4 +1,4 @@
-# Interaction design — PaperPeek v0.1.4
+# Interaction design — PaperPeek v0.1.5
 
 **Status:** implemented, manual Chrome verification pending.
 
@@ -44,8 +44,14 @@ One header (~65px), three tabs (Overview, Ask, Card), task content. No second pa
 
 Three tabs with roving tabIndex; named icon actions; 2px keyboard focus; status live region; model picker can be operated by keyboard; buttons disabled during active long tasks. Check 300/360/450px, system dark mode and long Chinese model names, compare with [design system](design-system.md).
 
-## v0.1.4 continuity and Settings affordance
+## v0.1.5 continuity and Settings affordance
 
 Chrome tabs act as independent paper workspaces: the Overview/Ask/Card view, questions, unsent draft and Paper Card follow each tab. Switching to another PDF must not erase the first; reopening the global Side Panel should restore the active tab. The Settings action uses a recognizable gear shape (`svg[data-icon="settings"]`) and remains distinct from sun/moon theme controls.
 
 The status badge may show **处理中** when a model call is ongoing in the active tab. Switching to a different tab permits the second paper to be used independently; a delayed response returns only to the original tab.
+
+## v0.1.5 readable Markdown and source mode
+
+The **Ask** view displays AI Markdown as typographic content rather than raw characters. Headings and paragraphs are compact; lists and fenced code are readable within the existing narrow Side Panel. Inline page navigation stays available for model-suggested PDF physical pages with an explicit unverified hint.
+
+The **Card** view defaults to a reading-friendly rendered Markdown preview. It has exactly one small toggle, **查看源码 ↔ 显示预览**, rather than another main tab. Copy/download use unchanged raw Markdown even when preview is active. The previous same-tab paper/answer lifetime is unaffected. Markdown text from models never executes raw HTML or automatically fetches remote images.

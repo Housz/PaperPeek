@@ -36,6 +36,9 @@ jobs:
           test -s dist/manifest.json
           test -s dist/sidepanel.html
           test -s dist/assets/background.js
+          for size in 16 32 48 128; do
+            test -s "dist/icons/icon${size}.png"
+          done
       - name: Upload unpacked extension
         uses: actions/upload-artifact@v4
         with:

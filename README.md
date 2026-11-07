@@ -4,9 +4,12 @@
 
 PaperPeek 是一个面向科研人员的 Chrome 侧边栏扩展，帮助理解**当前的一篇 PDF 论文**，快速判断研究价值、向论文提问，并导出便于回顾与 AI 再利用的简短 Markdown 论文卡片。
 
-> Status: **v0.1.4 experimental MVP**. Public arXiv PDFs are the primary test target. Not a PDF replacement, citation manager, archive or multi-paper knowledge base.
+> Status: **v0.1.5 experimental MVP**. Public arXiv PDFs are the primary test target. Not a PDF replacement, citation manager, archive or multi-paper knowledge base.
 
-## Current features (v0.1.4)
+## Current features (v0.1.5)
+
+- **Markdown 正常排版（修复 #7）**：AI 解读中的标题、粗体、列表、表格与代码块会正确渲染。Paper Card 默认预览，仍可查看/复制/保存原始 Markdown。
+- **正式浏览器图标（完成 #11）**：使用用户已提供的侧眼纸张角色 PNG，包含 16/32/48/128px 透明图标，支持 Chrome 工具栏和扩展管理页。
 
 - **当前 AI 模型状态**：顶栏显示所选服务商及实际用于新请求的模型 ID（窄屏悬停查看完整 ID）
 
@@ -27,7 +30,7 @@ PaperPeek 是一个面向科研人员的 Chrome 侧边栏扩展，帮助理解**
 
 **安装包统一发布在 [GitHub Releases](https://github.com/Housz/PaperPeek/releases)，不再依赖聊天附件或有有效期的 Actions Artifact。**
 
-从 Releases 的 **v0.1.4** 页面下载 `PaperPeek-v0.1.4-chrome.zip`（不要下载 GitHub 自动生成的 Source code ZIP）。解压后打开 `chrome://extensions` → 开启开发者模式 → **加载已解压的扩展程序** → 选择包含 `manifest.json` 的解压目录。可用随附 `SHA256SUMS.txt` 校验 ZIP。
+从 Releases 的 **v0.1.5** 页面下载 `PaperPeek-v0.1.5-chrome.zip`（不要下载 GitHub 自动生成的 Source code ZIP）。解压后打开 `chrome://extensions` → 开启开发者模式 → **加载已解压的扩展程序** → 选择包含 `manifest.json` 的解压目录。可用随附 `SHA256SUMS.txt` 校验 ZIP。
 
 已有解压安装的用户建议**在原安装目录内替换文件并刷新扩展**，不要先删除旧扩展，否则可能丢失本地模型配置。更新前先导出重要 Markdown，扩展重载会清理临时论文会话。
 
@@ -67,6 +70,7 @@ npm run build
 | [使用指南](docs/user-guide.md) | 安装、操作、排障 |
 | [开发规范](docs/development.md) | 工程结构、约定、测试与交付流程 |
 | [GitHub 发布规范](docs/releasing.md) | Release 自动构建、ZIP 安装、版本与校验要求 |
+| [扩展图标素材](docs/branding/paperpeek-icon-assets.md) | 用户已确认 PNG 图标、Manifest 配置及测试规则 |
 | [测试计划](docs/testing.md) | 自动化与手动验证矩阵 |
 | [验证报告](docs/verification.md) | CI 结果、未覆盖的真实浏览器与 API 测试 |
 | [PDF 支持矩阵](docs/pdf-support.md) | 文件、本地权限、嵌入 PDF、动态链接及限制 |

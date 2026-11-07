@@ -5,6 +5,7 @@ import { generateText, listModels, type AvailableModel } from "./lib/provider";
 import { askPrompt, overviewPrompt, PROMPT_PRESETS } from "./lib/prompts";
 import { parseDigest } from "./lib/digest";
 import { markdownFilename, toMarkdown } from "./lib/markdown";
+import { renderMarkdownInto, attachPdfPageHints } from "./lib/markdown-view";
 import {
   allowedPdfSource, candidatePdfUrl, isArxivUrl, permissionOrigin, sourcePageUrl
 } from "./lib/urls";
@@ -56,6 +57,8 @@ const askForm = byId<HTMLFormElement>("askForm");
 const askInput = byId<HTMLTextAreaElement>("askInput");
 const askBtn = byId<HTMLButtonElement>("askBtn");
 const cardText = byId<HTMLTextAreaElement>("cardText");
+const cardPreview = byId("cardPreview");
+const cardModeBtn = byId<HTMLButtonElement>("cardModeBtn");
 const providerInput = byId<HTMLSelectElement>("providerInput");
 const modelSelect = byId<HTMLSelectElement>("modelSelect");
 const modelInput = byId<HTMLInputElement>("modelInput");
@@ -84,6 +87,8 @@ let digest: Digest | null = null;
 let conversation: ChatMessage[] = [];
 let busy = false;
 let currentView = "overview";
+let cardSourceMode = false;
+let lastRenderedCard = "";
 let lastReadingView = "overview";
 let credentials: Credentials = {
   provider: "deepseek", model: DEFAULT_MODELS.deepseek,
@@ -306,10 +311,12 @@ function renderPaperState(): void {
   byId<HTMLButtonElement>("copyBtn").disabled = !cardText.value;
   byId<HTMLButtonElement>("downloadBtn").disabled = !cardText.value;
   renderEmptyState();
+  renderCard();
 }
 
 function resetPaper(): void {
   paper = null; digest = null; conversation = [];
+  cardSourceMode = false;
   cardText.value = "";
   askInput.value = "";
   overviewContent.replaceChildren();
@@ -370,29 +377,37 @@ function renderChat(): void {
   }
   for (const message of conversation) {
     const bubble = create("article", "message " + message.role);
-    bubble.append(create("div", "message-role", message.role === "user" ? "YOU" : "PAPERPEEK"));
-    const text = message.text;
-    if (message.role === "assistant" && paper?.sourceUrl) {
-      const matcher = /\[PDF p\.(\d+)\]/g;
-      let last = 0; let match: RegExpExecArray | null;
-      const body = create("div", "message-text");
-      while ((match = matcher.exec(text))) {
-        body.append(document.createTextNode(text.slice(last, match.index)));
-        const page = Number(match[1]);
-        if (page >= 1 && page <= paper.totalPages) {
-          const link = create("button", "page-link", match[0] + " ↗");
-          link.title = "模型提供的候选页码；未经过原文引用校验";
-          link.addEventListener("click", () => void navigateToPage(page));
-          body.append(link);
-        } else body.append(document.createTextNode(match[0]));
-        last = matcher.lastIndex;
-      }
-      body.append(document.createTextNode(text.slice(last)));
-      bubble.append(body);
-    } else bubble.append(create("div", "message-text", text));
+    bubble.append(create("div", "message-role",
+      message.role === "user" ? "YOU" : "PAPERPEEK"));
+    const body = create("div", "message-text");
+    if (message.role === "assistant") {
+      body.classList.add("markdown-prose");
+      renderMarkdownInto(body, message.text);
+      if (paper?.sourceUrl)
+        attachPdfPageHints(body, paper.totalPages, page => void navigateToPage(page));
+    } else {
+      // User input remains literal text; never interpret user-authored HTML.
+      body.textContent = message.text;
+    }
+    bubble.append(body);
     chatHistory.append(bubble);
   }
   chatHistory.scrollTop = chatHistory.scrollHeight;
+}
+
+function renderCard(): void {
+  const raw = cardText.value;
+  if (raw !== lastRenderedCard) {
+    if (raw) renderMarkdownInto(cardPreview, raw);
+    else cardPreview.replaceChildren(create("p", "card-placeholder",
+      "论文概览生成后，将显示排版后的 Markdown 卡片。"));
+    lastRenderedCard = raw;
+  }
+  cardPreview.hidden = cardSourceMode;
+  cardText.hidden = !cardSourceMode;
+  cardModeBtn.disabled = !raw;
+  cardModeBtn.textContent = cardSourceMode ? "显示预览" : "查看源码";
+  cardModeBtn.setAttribute("aria-pressed", String(cardSourceMode));
 }
 async function navigateToPage(page: number): Promise<void> {
   if (!paper?.sourceUrl || activeTabId === undefined) {
@@ -958,6 +973,11 @@ clearKeyBtn.addEventListener("click", () => {
     renderPaperState();
     showStatus("已清除 " + provider + " 保存的 API Key。");
   }).catch(() => showStatus("清除 Key 失败。", true));
+});
+cardModeBtn.addEventListener("click", () => {
+  if (!cardText.value) return;
+  cardSourceMode = !cardSourceMode;
+  renderCard();
 });
 byId("copyBtn").addEventListener("click", () => {
   if (!cardText.value) { showStatus("请先生成论文概览。", true); return; }

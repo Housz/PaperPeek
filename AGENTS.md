@@ -4,7 +4,7 @@ This file is the **entry point for coding agents and new maintainers**. Read it 
 
 ## Mission and frozen scope
 
-Version v0.1.4 is a **single current-PDF** reading helper with structure-focused summaries, Q&A, a short reusable Markdown Paper Card, and local BYOK provider settings. Public arXiv and permissioned local/public PDF sources first. No backend, no user accounts, no paper library, no external integrations, no automatic publication or notebook sync.
+Version v0.1.5 is a **single current-PDF** reading helper with structure-focused summaries, Q&A, a short reusable Markdown Paper Card, and local BYOK provider settings. Public arXiv and permissioned local/public PDF sources first. No backend, no user accounts, no paper library, no external integrations, no automatic publication or notebook sync.
 
 ## Read order
 
@@ -34,6 +34,8 @@ Version v0.1.4 is a **single current-PDF** reading helper with structure-focused
 - `src/lib/markdown.ts` deterministic Markdown export
 - `src/lib/storage.ts` per-provider BYOK profiles, opt-in persistent keys, legacy migration
 - `src/lib/tab-workspace.ts` compressed per-tab ephemeral research state; must never contain API keys
+- `src/lib/markdown-view.ts` only untrusted Markdown presentation boundary; raw HTML forbidden, no remote images
+- `public/icons/` approved Issue #11 PNG icon assets and `docs/branding/` asset contract
 - `tests/` deterministic unit tests; no real API credentials
 - `.github/workflows/ci.yml` checks and per-version CI artifact
 - `.github/workflows/release.yml` release-only build/test/package/tag/publish (main branch)
@@ -70,11 +72,16 @@ Write an ADR in `docs/decisions/` for migration to MIME Handler, PDF.js viewer, 
 - Updating prompt templates requires bilingual first mention and evidence abstention checks; bump PROMPT_LIBRARY_VERSION on substantive changes.
 - Use `docs/verification.md` to distinguish CI green from manually verified publisher/Chrome behavior.
 
-## v0.1.4 handoff note
+## v0.1.5 handoff note
 
 Run `tests/tab-workspace.test.ts` and `tests/reader-flows.test.ts` after modifying tab activation, state snapshots, async model tasks, model selection, PDF citation navigation, or Side Panel reopening. The workspaces live in `chrome.storage.session` and are cleared on browser restart/extension reload; do not silently turn them into an archival local database. Verify no API credentials enter the workspace snapshot. Follow `docs/tab-sessions.md`.
 
-## v0.1.4 model-status/release invariant
+## v0.1.5 model-status/release invariant
 
 - Keep a single topbar. `modelStatus` must show the active provider and exact model ID **used for new requests**, updating after settings save, and preserve a full tooltip on narrow sidebars. Do not disclose credentials.
 - Changes to GitHub Release automation require `tests/release.test.ts`, full CI and a successful release workflow. Do not silently replace a published tag/asset; bump version for future releases. Update README with verified GitHub release link.
+
+## v0.1.5 issue-specific invariants
+
+- Issue #7: Render AI explanations and Paper Card preview via the bundled safe Markdown parser, **not** raw model HTML. Keep untrusted HTML disabled, restrict links, disable network image loading; preserve PDF citation behavior and original `.md` copy/download. Maintain `tests/markdown-view.test.ts` and `tests/reader-flows.test.ts`.
+- Issue #11: Use original PNGs from asset branch, wired into Chrome Manifest. Never replace supplied artwork with generated substitutes. `tests/icons.test.ts` checks all four sizes; GitHub Release ZIP verifies all icon paths.

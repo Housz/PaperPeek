@@ -1,11 +1,11 @@
-# PaperPeek user guide — v0.1.4
+# PaperPeek user guide — v0.1.5
 
 **Chrome 116+ · single research PDF · no PaperPeek backend.** Experimental extension; test with public materials first.
 
 ## Install from GitHub Releases (recommended)
 
-1. Open [PaperPeek Releases](https://github.com/Housz/PaperPeek/releases) and select **v0.1.4**.
-2. Under **Assets**, download `PaperPeek-v0.1.4-chrome.zip`. **Do not use the auto-generated GitHub Source code ZIP**, which is not the built extension.
+1. Open [PaperPeek Releases](https://github.com/Housz/PaperPeek/releases) and select **v0.1.5**.
+2. Under **Assets**, download `PaperPeek-v0.1.5-chrome.zip`. **Do not use the auto-generated GitHub Source code ZIP**, which is not the built extension.
 3. Unzip into a stable local folder. The folder you select must directly contain `manifest.json`.
 4. In Chrome open `chrome://extensions`, enable Developer mode → **Load unpacked** → select that folder.
 5. Configure your own AI API Key in PaperPeek Settings.
@@ -74,3 +74,11 @@ Overview highlights research problem, mechanism, evidence/limitations. Key techn
 | Formula/figure garbled | PDF.js text extraction may lose layout; visual crop is not shipped |
 
 Never paste keys in issues, screenshots or debugging logs. Use a separate limited-quota API key.
+
+## Markdown reading and Paper Card (v0.1.5)
+
+**Ask:** AI responses now render Markdown headings, emphasis, nested lists, tables and fenced code as reading content. References such as `[PDF p.3]` are clickable *navigation hints* only; their source location is not independently verified. Raw HTML in the answer is escaped rather than executed, and remote images are never loaded automatically.
+
+**Paper Card:** Open the **卡片** tab to read formatted Markdown by default. Press **查看源码** to inspect exact Markdown text; press **显示预览** to return to formatted reading. **复制 Markdown** and **保存 .md** use the original text, not a rendered HTML export. Your Obsidian workflow and file format are unchanged.
+
+**Browser icon:** Chrome now shows the approved folded-paper/side-eye PNG logo at toolbar and extension settings sizes. If an old icon remains, reload the unpacked extension at `chrome://extensions` and check that the selected directory contains `icons/icon16.png`, `icon32.png`, `icon48.png`, and `icon128.png`.

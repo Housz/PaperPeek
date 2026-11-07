@@ -19,7 +19,7 @@ describe("single-header reader UI contract", () => {
       "fileInput", "sourceChooser", "sourceSelect", "sourceChooseBtn",
       "pasteUrlInput", "pasteUrlForm", "fileAccessHint", "fileAccessBtn",
       "overviewEmpty", "overviewContent", "chatHistory", "promptSuggestions",
-      "presetList", "askInput", "askBtn", "cardText", "copyBtn", "downloadBtn",
+      "presetList", "askInput", "askBtn", "cardText", "cardPreview", "cardModeBtn", "copyBtn", "downloadBtn",
       "settingsToggle", "providerInput", "modelSelect", "modelInput",
       "refreshModelsBtn", "modelHint", "keyInput", "rememberInput", "clearKeyBtn"
     ]) expect(ids).toContain(id);
@@ -30,6 +30,7 @@ describe("single-header reader UI contract", () => {
     expect(html).toContain('aria-label="模型设置"');
     expect(html).toContain('aria-label="当前 AI 模型"');
     expect(html).toContain('data-icon="settings"');
+    expect(html).toContain('aria-label="论文卡片 Markdown 预览"');
     expect(html).toContain('id="rememberInput"');
     expect(html).toContain("关闭后仍可使用");
     expect(html).toContain('role="tablist"');

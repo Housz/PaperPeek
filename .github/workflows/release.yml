@@ -77,11 +77,17 @@ jobs:
           test -s dist/manifest.json
           test -s dist/sidepanel.html
           test -s dist/assets/background.js
+          for size in 16 32 48 128; do
+            test -s "dist/icons/icon${size}.png"
+          done
           node -e 'const p=require("./dist/manifest.json");if(p.version!==process.env.VERSION) process.exit(1)'
           ZIP_NAME="PaperPeek-${TAG}-chrome.zip"
           (cd dist && zip -q -r "$GITHUB_WORKSPACE/$ZIP_NAME" .)
           unzip -Z1 "$ZIP_NAME" | grep -qx 'manifest.json'
           unzip -Z1 "$ZIP_NAME" | grep -qx 'sidepanel.html'
+          for size in 16 32 48 128; do
+            unzip -Z1 "$ZIP_NAME" | grep -qx "icons/icon${size}.png"
+          done
           sha256sum "$ZIP_NAME" > SHA256SUMS.txt
           echo "Archive: $ZIP_NAME"
           cat SHA256SUMS.txt

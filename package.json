@@ -1,7 +1,7 @@
 {
   "name": "paperpeek",
   "private": true,
-  "version": "0.1.4",
+  "version": "0.1.5",
   "type": "module",
   "scripts": {
     "check": "tsc --noEmit",
@@ -10,7 +10,8 @@
     "dev": "vite build --watch"
   },
   "dependencies": {
-    "pdfjs-dist": "5.7.284"
+    "pdfjs-dist": "5.7.284",
+    "markdown-it": "15.0.3"
   },
   "devDependencies": {
     "@types/chrome": "0.3.7",

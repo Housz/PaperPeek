@@ -1,4 +1,4 @@
-# Requirements / PRD — PaperPeek v0.1.4
+# Requirements / PRD — PaperPeek v0.1.5
 
 **Status:** accepted initial scope. **Owner:** repository maintainer. **Last updated:** 2026-11-02. Change with a PR when behavior changes.
 
@@ -50,7 +50,7 @@ How many pages in a typical discipline? Should digest be auto-generated on PDF l
 
 Time to initial paper decision; answer correctness audited against PDF; ratio of verified digest evidence; public PDF load success; Markdown reuse without edits. Do not report invented benchmark scores.
 
-## v0.1.4 acceptance additions
+## v0.1.5 acceptance additions
 
 - Current file:///...pdf is recognized; without file permission, show access instructions instead of silently failing; manual picker still works.
 - One-header source controls are always available: detect, upload, analyze and settings; no second document toolbar.
@@ -60,7 +60,7 @@ Time to initial paper decision; answer correctness audited against PDF; ratio of
 - Versioned six-preset scientific prompt library; concise Overview requires Chinese (English) first mention and evidence/claims distinction.
 - Do not claim authenticated/blob/POST-only sources or real publisher compatibility until manually verified.
 
-## v0.1.4 acceptance — tab-scoped continuity
+## v0.1.5 acceptance — tab-scoped continuity
 
 - Switching A → B → A restores A's PDF, overview, chat and unsent question draft without another PDF parse or API call.
 - Same PDF open in two different Chrome tabs produces two **independent** workspaces.
@@ -70,3 +70,12 @@ Time to initial paper decision; answer correctness audited against PDF; ratio of
 - Navigating the *same tab* to a different document clears the old document and starts a fresh workspace.
 - Closing a tab deletes only that tab's cached research state; browser restart or extension reload clears ephemeral session state by design.
 - UI gear icon must be visually distinguishable from the OS light/dark appearance switch.
+
+## v0.1.5 acceptance — Issues #7 and #11
+
+- AI answers render Markdown headings, emphasis, lists, quotations, tables and code blocks as typeset content, rather than raw `##` and `**` syntax.
+- All LLM and PDF text remains untrusted. Raw HTML/JS from model responses must never become executable DOM; non-HTTP(S) links and auto-loaded external images are prohibited.
+- Model-suggested `[PDF p.N]` citations remain navigable where in range but visibly labeled as unverified hints. Code examples containing citation syntax must stay code.
+- Paper Card defaults to rendered preview and offers a raw-source toggle. Copy/download still exports the original deterministic `.md` with no HTML transformation.
+- Chrome toolbar/action and extension icons come from the approved Issue #11 transparent PNG files at 16, 32, 48 and 128 px. No substitute logo or unnecessary decorative UI.
+- CI/Release must verify the Manifest icon mappings and existence of all four PNG files in the ZIP before publication.
