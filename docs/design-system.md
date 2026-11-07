@@ -1,4 +1,4 @@
-# PaperPeek design system — compact Side Panel v0.1.4
+# PaperPeek design system — compact Side Panel v0.1.5
 
 **Status:** implemented as CSS tokens and DOM. **Owner:** maintainer. **Updated:** 2026-11-03.
 
@@ -81,14 +81,18 @@ Required screenshot widths **300 / 360 / 450px**, including long paper filename,
 
 Update `sidepanel.html`, `src/styles.css`, `src/main.ts`, `docs/ui-design.md`, this file and `tests/ui.test.ts` when navigation or controls change. Do not add visual ornament without a documented user need.
 
-## v0.1.4 icon semantics
+## v0.1.5 icon semantics
 
 Settings is a conventional toothed gear (not a sun, brightness, appearance icon). Keep `aria-label="模型设置"` and `data-icon="settings"` in the SVG. The topbar contains source detection, file picker, Analyze and this one Settings action. Never use theme iconography to indicate model configuration.
 
 When returning to a previously analyzed tab, show its last reading view and existing content without a large empty-state flash. Keep the 65px single header and visible focus styles.
 
-## Model status in compact header (v0.1.4)
+## Model status in compact header (v0.1.5)
 
 The existing `.header-brand` row includes the provider and *exact* active model ID in `#modelStatus`, for example `OpenAI · gpt-4.1-mini`. This is the model selected for **new requests**, not a provenance label on previous answers. The label updates on settings save and does **not** expose the API Key.
 
 The Side Panel may be only 280–360px wide. Model label uses ellipsis (`text-overflow: ellipsis`), and the tooltip holds the full provider, model and whether a key is configured. Below 400px, redundant paper-state text is visually hidden to make room for the model label. **Do not add a second header or status bar** to show model metadata.
+
+## v0.1.5 Markdown prose styles
+
+`.markdown-prose` is an editorial content style shared by assistant replies and the Paper Card preview. H1/H2/H3 sizes are 18/16/14px or more restrained in Paper Card, with 1.75 line-height and slim vertical rhythm. Code blocks have quiet neutral background and horizontal overflow; tables scroll horizontally on narrow Side Panels rather than widening the whole panel. Untrusted Markdown is rendered with HTML disabled; the renderer disallows unsafe links and remote images. Avoid oversized boxes, bright colors or extra navigation bars. The raw Markdown textarea remains available behind the single view/source toggle.
