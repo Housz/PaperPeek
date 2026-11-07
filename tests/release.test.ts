@@ -28,7 +28,7 @@ describe("GitHub Release publishing contract", () => {
     expect(workflow).toContain("npm run build");
     expect(workflow).toContain('test -s dist/manifest.json');
     expect(workflow).toContain("unzip -Z1");
-    expect(workflow).toContain("dist/icons/icon128.png");
+    expect(workflow).toContain('dist/icons/icon${size}.png');
     expect(workflow).toContain("sha256sum");
     expect(workflow).toContain("gh release create");
   });
