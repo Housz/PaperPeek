@@ -1,4 +1,4 @@
-# PaperPeek technical architecture — v0.1.4
+# PaperPeek technical architecture — v0.1.5
 
 **Status:** code implemented, real website compatibility still under manual verification.
 
