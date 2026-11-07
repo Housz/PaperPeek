@@ -49,3 +49,10 @@ Patch for bugs and docs; minor for new reading/export feature; release notes mus
 ## Release automation (v0.1.4)
 
 `release.yml` runs after merge to `main` or via manual workflow dispatch. It reads the package and Manifest version, checks the matching release notes, repeats type/test/build, packages a root-manifest Chrome ZIP, generates SHA256SUMS and publishes a GitHub **pre-release**. An already published version is skipped; bump the version for future updates. Run `tests/release.test.ts` after changing release CI. CI uses GitHub's repository token only, not API keys from model vendors.
+
+## v0.1.5 untrusted Markdown and icon contract
+
+- Only `src/lib/markdown-view.ts` may convert assistant-supplied Markdown to markup. Keep `html: false`, HTTP(S)-only links, external images disabled and size caps. Never render arbitrary source HTML or use remote scripts/CDNs. Update `tests/markdown-view.test.ts` for changes.
+- The Card preview is not the artifact. Export/clipboard must continue to use `cardText.value` from the deterministic `toMarkdown()` function, unchanged by rendering.
+- Browser icons must originate from the approved Issue #11 PNG files in `public/icons/`. Do not regenerate them. Update `tests/icons.test.ts`, `docs/branding/paperpeek-icon-assets.md` and Manifest when changing branding.
+- ZIP Release checks require all four PNG icons and the root Manifest. Follow `docs/releasing.md` before publishing.
