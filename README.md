@@ -30,7 +30,7 @@ PaperPeek 是一个面向科研人员的 Chrome 侧边栏扩展，帮助理解**
 
 **安装包统一发布在 [GitHub Releases](https://github.com/Housz/PaperPeek/releases)，不再依赖聊天附件或有有效期的 Actions Artifact。**
 
-从 Releases 的 **v0.1.5** 页面下载 `PaperPeek-v0.1.5-chrome.zip`（不要下载 GitHub 自动生成的 Source code ZIP）。解压后打开 `chrome://extensions` → 开启开发者模式 → **加载已解压的扩展程序** → 选择包含 `manifest.json` 的解压目录。可用随附 `SHA256SUMS.txt` 校验 ZIP。
+在 Releases 页面选择**已经成功发布**的版本，下载 Assets 中的 `PaperPeek-vX.Y.Z-chrome.zip`（不要下载 GitHub 自动生成的 Source code ZIP）。源码版本可能先于安装包发布；若对应版本没有 ZIP 和 `SHA256SUMS.txt`，表示 GitHub Actions 发布尚未完成。解压后打开 `chrome://extensions` → 开启开发者模式 → **加载已解压的扩展程序** → 选择包含 `manifest.json` 的解压目录。可用随附 `SHA256SUMS.txt` 校验 ZIP。
 
 已有解压安装的用户建议**在原安装目录内替换文件并刷新扩展**，不要先删除旧扩展，否则可能丢失本地模型配置。更新前先导出重要 Markdown，扩展重载会清理临时论文会话。
 
