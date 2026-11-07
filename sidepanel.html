@@ -103,9 +103,13 @@
         <div class="card-actions">
           <button id="copyBtn" type="button" class="button button-secondary" disabled>复制 Markdown</button>
           <button id="downloadBtn" type="button" class="button button-ghost" disabled>保存 .md</button>
+          <button id="cardModeBtn" type="button" class="button button-ghost" aria-pressed="false" disabled>查看源码</button>
         </div>
-        <label for="cardText" class="sr-only">Markdown 论文卡片</label>
-        <textarea id="cardText" class="card-text" readonly placeholder="论文概览生成后，将自动显示 Markdown 卡片。"></textarea>
+        <div id="cardPreview" class="markdown-prose card-preview" role="region" aria-label="论文卡片 Markdown 预览">
+          <p class="card-placeholder">论文概览生成后，将显示排版后的 Markdown 卡片。</p>
+        </div>
+        <label for="cardText" class="sr-only">Markdown 论文卡片源码</label>
+        <textarea id="cardText" class="card-text" readonly hidden placeholder="论文概览生成后，将自动显示 Markdown 卡片。"></textarea>
       </section>
 
       <section id="view-settings" class="view view-settings" data-view="settings" aria-labelledby="settingsTitle" hidden>
