@@ -261,4 +261,53 @@ describe("reader journeys (actual Side Panel DOM with mocked Chrome/API)", () =>
     expect(byId("modelStatus").title).toContain("deepseek-v4-pro");
   });
 
+
+  it("renders assistant Markdown while preserving PDF page-hint links", async () => {
+    mock.generate.mockImplementation(async ({ prompt }: { prompt: string }) =>
+      prompt.includes('"tldr"')
+        ? digest
+        : "## 实验结果\n\n**显著提升**（attention mechanism）[PDF p.2]\n\n- 验证点 A\n- 验证点 B");
+    await mountSidePanel();
+    await vi.waitFor(() => expect(byId("paperTitle").textContent).toContain("2601.00001"));
+    click("analyzeBtn");
+    await analyzed();
+    click("tab-ask");
+    byId<HTMLTextAreaElement>("askInput").value = "解释实验结果";
+    byId<HTMLFormElement>("askForm").dispatchEvent(
+      new Event("submit", { bubbles: true, cancelable: true })
+    );
+    await vi.waitFor(() => expect(document.querySelector(".message.assistant h2")?.textContent)
+      .toBe("实验结果"));
+    expect(document.querySelector(".message.assistant strong")?.textContent).toBe("显著提升");
+    expect(document.querySelectorAll(".message.assistant li")).toHaveLength(2);
+    expect(document.querySelector(".message.assistant .page-link")?.textContent)
+      .toContain("PDF p.2");
+    expect(document.querySelector(".message.assistant")?.textContent).not.toContain("## 实验结果");
+  });
+
+  it("shows rendered Paper Card by default and exports unchanged Markdown source", async () => {
+    await mountSidePanel();
+    await vi.waitFor(() => expect(byId("paperTitle").textContent).toContain("2601.00001"));
+    click("analyzeBtn");
+    await analyzed();
+    click("tab-card");
+    const preview = byId("cardPreview");
+    const source = byId<HTMLTextAreaElement>("cardText");
+    const button = byId<HTMLButtonElement>("cardModeBtn");
+    expect(preview.hidden).toBe(false);
+    expect(source.hidden).toBe(true);
+    expect(preview.querySelector("h1")?.textContent).toBe("Paper A");
+    expect(preview.querySelector("h2")?.textContent).toBe("TL;DR");
+    const original = source.value;
+    expect(original).toContain("## TL;DR");
+    click("cardModeBtn");
+    expect(preview.hidden).toBe(true);
+    expect(source.hidden).toBe(false);
+    expect(source.value).toBe(original);
+    click("cardModeBtn");
+    expect(preview.hidden).toBe(false);
+    expect(source.value).toBe(original);
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+  });
+
 });
