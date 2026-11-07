@@ -38,3 +38,12 @@ Client-only BYOK is not equivalent to a backend secret management solution. Pass
 - `tabs.onRemoved` deletes the closed tab's workspace. The extension does not create a permanent paper archive, and browser restart/extension reload clears Chrome session storage.
 - PDF source URLs may contain filenames or query strings. They stay local to the browser session; never transmit local `file://` paths in LLM prompts.
 - If session storage quota is exhausted, display a warning and advise copying Markdown; never silently claim persistence succeeded.
+
+## v0.1.5 untrusted Markdown presentation (#7)
+
+- `src/lib/markdown-view.ts` bundles `markdown-it@15.0.3` in the extension. It is configured with `html: false`, no automatic linkification, image syntax disabled and an explicit HTTP(S)-only link allowlist.
+- Parser-produced markup is inserted through a DOMParser document; **raw source HTML never goes to `innerHTML`**. Script tags, event handlers, SVG and remote image tags contained in LLM/PDF source remain escaped text or inert Markdown syntax.
+- External links open in a new tab using `rel="noopener noreferrer"` and `referrerpolicy="no-referrer"`; Markdown cannot trigger a background image request.
+- PDF citation hints are converted only from plain text nodes outside code/links and cannot execute instructions.
+- Rendered formatting is a presentation layer only. `toMarkdown` output, source evidence validation and clipboard/download keep their existing semantics.
+- Regression tests must include script/link injection attempts and excessively long model responses.
