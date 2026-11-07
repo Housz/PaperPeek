@@ -76,3 +76,9 @@ The previous version kept `paper`, `digest` and `conversation` in a single side-
 - Work in progress while Side Panel itself closes is not guaranteed to finish. Data already checkpointed remains available for retry.
 
 See [tab sessions](tab-sessions.md) and [verification](verification.md).
+
+## Markdown presentation (v0.1.5)
+
+`src/lib/markdown-view.ts` is the single local Markdown rendering boundary for untrusted model explanations and the Paper Card preview. It uses `markdown-it` (HTML disabled, executable/unsupported links rejected, remote images disabled) and DOMParser. `renderChat()` renders assistant messages with this boundary and then transforms safe plain-text `[PDF p.N]` hints into unverified navigation buttons. Paper Card uses the existing deterministic Markdown string for copy/download and shows a separate preview DOM; no double model invocation.
+
+Issue #11 icons live in `public/icons/` and are copied by Vite into `dist/icons/`, referenced from Manifest V3 `icons` and `action.default_icon`. CI and Release enforce the presence of each size.
