@@ -104,3 +104,18 @@ The automated test counts above do **not** certify those browser/provider workfl
 - Browser restart or extension reload/update clears ephemeral `storage.session` per official Chrome documentation, even when Chrome restores tabs; a future opt-in durable cache would need separate requirements and privacy review.
 
 **Release status:** experimental MVP v0.1.4. Simulated UI tests plus a packaged build give stronger confidence than pure unit tests, but they are not a real desktop Chrome extension smoke test. Follow [tab-session manual checklist](tab-sessions.md) and [testing](testing.md) before store publication.
+
+
+## v0.1.5 — Issues #7 and #11 (2026-11-07)
+
+**Implementation:** Markdown formatting and Paper Card preview/source toggle are implemented in `src/lib/markdown-view.ts`, `src/main.ts`, and `sidepanel.html`. The renderer uses patched, bundled `markdown-it@15.0.3` with raw HTML disabled, HTTP(S)-only external links, and remote image loading disabled. The browser icons are the **original approved PNGs** from Issue #11's [existing Git blob commit](https://github.com/Housz/PaperPeek/commit/6f1d76681cb0d5265bbf198598f0071251a300b8); Chrome Manifest, CI and Release checks reference all sizes.
+
+**Tests written (outcome pending GitHub runner):**
+- `tests/markdown-view.test.ts`: headings/emphasis/tables/code, raw HTML/script and unsafe link rejection, no image fetch, bounded input and PDF navigation hints.
+- `tests/reader-flows.test.ts`: actual simulated Side Panel DOM Markdown answer rendering, Card default preview ↔ raw source, unchanged Markdown export.
+- `tests/icons.test.ts`: PNG signature, exact 16/32/48/128 dimensions, transparency metadata and Manifest paths.
+- `tests/release.test.ts`: matching v0.1.5 manifest/package version, required release-notes asset and icon paths in release pipeline.
+
+**GitHub Actions execution blocker:** On 2026-11-07 PR #12 runs [42348885708](https://github.com/Housz/PaperPeek/actions/runs/42348885708) and [42349019960](https://github.com/Housz/PaperPeek/actions/runs/42349019960) reported `failure` **without any job steps or available logs**; attempting to fetch logs returned `BlobNotFound`. To isolate the fault, temporary diagnostic draft PR #13 used **unchanged v0.1.4 main source**, but its runs [42349226102](https://github.com/Housz/PaperPeek/actions/runs/42349226102) and [42349300804](https://github.com/Housz/PaperPeek/actions/runs/42349300804) also failed before all job steps, including an explicit `ubuntu-24.04` runner. The diagnostic PR was closed without merge. This is **not evidence that the new tests failed**. It indicates a GitHub Actions runner/workflow/account environment blocker; its exact cause could not be established from the connected API. GitHub's public status board has not confirmed a current global outage.
+
+**Release gate:** Do not state v0.1.5 is downloadable until the `Publish Chrome extension Release` workflow completes on `main`, and GitHub shows the `PaperPeek-v0.1.5-chrome.zip`, `SHA256SUMS.txt` assets plus a `paperpeek/release-assets` success status. Do not bypass this with a manually renamed temporary artifact. Run the owner-controlled desktop Chrome smoke of Markdown, icon and PDF behavior after release build.
