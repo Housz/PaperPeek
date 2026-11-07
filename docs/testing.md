@@ -1,4 +1,4 @@
-# Test plan — v0.1.4
+# Test plan — v0.1.5
 
 **Test strategy:** deterministic unit tests in CI + real Chrome/PDF/provider manual smoke. Do not infer successful production behavior from mocked tests.
 
@@ -12,7 +12,7 @@
 
 CI runs TypeScript check, unit tests and bundle build; publishes `dist` artifact.
 
-## UI acceptance (v0.1.4)
+## UI acceptance (v0.1.5)
 
 Check at 300 / 360 / 450px sidebar width, light and OS-dark modes: source strip is compact and hidden when no PDF or while Settings is open; only Overview / Ask / Card are main tabs; explanation quick questions live in Ask; Settings back restores last reading tab; empty-state actions reflect PDF+BYOK readiness; keyboard arrow keys navigate tabs; paper text, page links, chat and Markdown do not clip horizontally.
 
@@ -48,7 +48,7 @@ The unit suite deliberately uses only dummy credentials and mocked responses. Ac
 
 Every new Chrome permission, PDF fetch strategy, prompt field, provider adapter or Markdown field needs corresponding tests and user guide update.
 
-## v0.1.4 focused regression matrix
+## v0.1.5 focused regression matrix
 
 | ID | Case | Expected |
 |---|---|---|
@@ -68,7 +68,7 @@ Every new Chrome permission, PDF fetch strategy, prompt field, provider adapter 
 | U01 | Side Panel 300/360/450px | Single header, no overflow, 14px reading text, keyboard controls |
 
 Do not interpret mocked tests as successful compatibility tests against publishers or actual browser file access.
-## v0.1.4 common researcher journey tests
+## v0.1.5 common researcher journey tests
 
 Automated `tests/tab-workspace.test.ts` and `tests/reader-flows.test.ts` cover compressed storage, A→B→A tab switching, identical URL tabs, reopen panel, draft retention, delayed responses, verified-source page jumps, invalidation on unrelated navigation and tab closure. The UI integration tests execute the **actual Side Panel TypeScript entrypoint and DOM** with mocked Chrome and LLM API calls (happy-dom), not a real Chrome extension runtime.
 
@@ -91,9 +91,24 @@ Manual desktop Chrome end-to-end acceptance required before public release:
 
 Also test 300/360/450px Side Panel widths, restricted file permission and offline/error handling. Never place real API keys or private PDFs in CI artifacts.
 
-## v0.1.4 release and model status smoke
+## v0.1.5 release and model status smoke
 
 - Model status: after loading the extension, verify the current service/model name in the single header; change the model ID in Settings and Save, confirm the header updates without refreshing the tab. At 300px width, hover for the full ID.
 - Use only a test/dummy key in CI. Model name is independent of the confidential API Key; never display a key in header or screenshot.
-- GitHub Release workflow (after merge to main): verify GitHub Actions check/test/build success, tag `v0.1.4`, GitHub Release Assets `PaperPeek-v0.1.4-chrome.zip` and `SHA256SUMS.txt`. Unzip and confirm `manifest.json` is at ZIP root.
+- GitHub Release workflow (after merge to main): verify GitHub Actions check/test/build success, tag `v0.1.5`, GitHub Release Assets `PaperPeek-v0.1.5-chrome.zip` and `SHA256SUMS.txt`. Unzip and confirm `manifest.json` is at ZIP root.
 - Loading from Release assets is a **manual Chrome smoke**. Verify real PDF analysis and tab continuity after installation; do not infer it from unit or mocked DOM tests.
+
+## v0.1.5 issue regression cases
+
+| ID | Workflow | Expected |
+|---|---|---|
+| MD01 | Ask model returns `## Heading`, `**bold**`, Markdown list | Headings, emphasis, lists are rendered; no raw markers |
+| MD02 | Ask returns table, fenced code, blockquote | Proper structure, horizontal scroll for wide code/tables |
+| MD03 | Model returns script tags, event-handler HTML, JS/file/data links, remote image | No script/iframe/img element and no remote image requests |
+| MD04 | Model returns `[PDF p.N]` in prose and code | Prose hint is clickable only for valid page; code remains unchanged |
+| MD05 | Card summary generated and copied with preview open | Preview formatted; clipboard/download exactly the original Markdown |
+| MD06 | Toggle Card source/preview, switch tabs, reopen panel | No losing digest or `.md` source; preview can be rebuilt |
+| ICON01 | Extension loads with approved 16/32/48/128 PNGs | Icon visible at toolbar and extension manager, transparent outer corner |
+| ICON02 | Build/release asset ZIP | All icon sizes included, Manifest references existing files |
+
+Review the approved Issue #11 artwork visually in a real Chrome profile; binary file/PNG header tests cannot certify rendering at every DPI. The UI DOM tests use simulated Chrome and model calls, not a real desktop browser.
