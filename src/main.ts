@@ -1,4 +1,4 @@
-import { getReadingSession, sessionForTab, sessionForWorkspace, type ReadingSession, type ReadingSelection } from "./lib/reading-loop";
+import { getReadingSession, sessionForTab, sessionForWorkspace, type ReadingSession, type ReadingSelection, type ReadingPosition } from "./lib/reading-loop";
 import { openReader, selectionKey, loopMessage, type SelectionRequest } from "./lib/reader-bridge";
 import { translationPrompt } from "./lib/translation";
 import type { ChatMessage, Digest, Paper, Provider } from "./types";
@@ -1081,7 +1081,7 @@ async function init(): Promise<void> {
   // The last reading destination is scoped to the restored tab.
   setView(lastReadingView);
 }
-async function readInPaperPeek(page?: number, quote?: string): Promise<void> {
+async function readInPaperPeek(page?: number, quote?: string, position?: ReadingPosition): Promise<void> {
   if (busy || activeTabId === undefined || visibleTabId === undefined) return;
   const origin = activeTabId;
   try {
@@ -1102,7 +1102,7 @@ async function readInPaperPeek(page?: number, quote?: string): Promise<void> {
     const target = paper;
     const session = await openReader(origin, target.documentId!, target.sourceUrl, tabUrl,
       activeReadingSession?.sourceTabId ?? visibleTabId,
-      page === undefined ? undefined : { pageNumber: page, exactQuote: quote, verification: quote ? 'quote-verified' : 'model-hint' });
+      page === undefined ? undefined : { pageNumber: page, exactQuote: quote, verification: quote ? 'quote-verified' : 'model-hint' }, position);
     // The background copied the checkpoint before opening/activating the Reader.
     // Never overwrite it with a stale pre-navigation snapshot.
     if (activeTabId === origin) { activeTabId = session.workspaceTabId; activeReadingSession = session; }
@@ -1120,7 +1120,7 @@ function renderSelectionDraft(): void {
   selectionDraft.append(create('span', '', `PDF 第 ${selected.pageStart}${selected.pageEnd === selected.pageStart ? '' : '–' + selected.pageEnd} 页 · 已选 ${selected.text.length} 字符`),
     create('blockquote', '', selected.text));
   const back = create('button', 'button button-secondary', '返回原文');
-  back.type = 'button'; back.onclick = () => void readInPaperPeek(selected.pageStart, selected.anchor.exactQuote);
+  back.type = 'button'; back.onclick = () => void (selected.position ? readInPaperPeek(undefined, undefined, selected.position) : readInPaperPeek(selected.pageStart, selected.anchor.exactQuote));
   const remove = create('button', 'button button-secondary', '移除引用');
   remove.type = 'button'; remove.onclick = () => { draftSelection = undefined; renderSelectionDraft(); checkpointWorkspace(); };
   const translate = create('button', 'button button-secondary', '翻译此选区');

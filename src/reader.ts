@@ -22,6 +22,7 @@ let fit = true;
 let epoch = 0;
 let currentPage = 1;
 let pendingAnchor: PdfAnchor | undefined;
+let pendingReturn: {documentId:string;position:ReadingPosition} | undefined;
 let selection: ReadingSelection | null = null;
 let selectionPosition: ReadingPosition | null = null;
 const returnStack: ReadingPosition[] = [];
@@ -34,7 +35,7 @@ let searchResults: {page:number;quote:string;prefix:string;suffix:string}[] = []
 let searchIndex = -1;
 function status(text: string, error = false) { $('status').textContent = text; $('status').classList.toggle('error',error); }
 function send(message: object): Promise<any> { return chrome.runtime.sendMessage({ ...message, sessionId }); }
-function position(): ReadingPosition { return { pageNumber: currentPage, scrollTop: window.scrollY, scrollLeft: window.scrollX, scale, rotation }; }
+function position(): ReadingPosition { return { pageNumber: currentPage, scrollTop: window.scrollY, scrollLeft: pagesRoot.scrollLeft, scale, rotation }; }
 function saveReturn() { returnStack.push(position()); if(returnStack.length>20)returnStack.shift(); $('returnPosition').removeAttribute('disabled'); }
 function hideSelection() { $('selectionActions').hidden=true; }
 function updatePageNumber() {
@@ -165,10 +166,10 @@ async function rescale(next:number,nextRotation=rotation){
   scale=Math.min(3.5,Math.max(.35,next));rotation=nextRotation;epoch++;clearHighlights();hideSelection();
   await Promise.all(pages.map(p=>p.rendering));for(const p of pages){p.rendered=false;p.element.replaceChildren();}
   sizePages();watchPages();const target=pages[currentPage-1];if(target){await renderPage(target);window.scrollTo(0,target.element.offsetTop+fraction*target.element.offsetHeight);}
-  $('fitWidth').textContent=fit?'适合宽度':`${Math.round(scale*100)}%`;
+  $('fitWidth').textContent=fit?'适合宽度':`${Math.round(scale*100)}%`;schedulePositionSave();
 }
 function fitScale(){const p=pages[currentPage-1]?.page;if(!p)return 1;return Math.min(3.5,(document.documentElement.clientWidth-40)/p.getViewport({scale:1,rotation:(p.rotate+rotation)%360}).width);}
-async function restorePosition(p:ReadingPosition){fit=false;currentPage=p.pageNumber;await rescale(p.scale,p.rotation);window.scrollTo(p.scrollLeft,p.scrollTop);updatePageNumber();}
+async function restorePosition(p:ReadingPosition){navigationEpoch++;fit=false;currentPage=p.pageNumber;await rescale(p.scale,p.rotation);window.scrollTo(0,p.scrollTop);pagesRoot.scrollLeft=p.scrollLeft;updatePageNumber();schedulePositionSave();}
 async function outline(){
   if(!pdf)return;const root=$('outline');root.replaceChildren();const items=await pdf.getOutline();if(!items?.length){root.textContent='此 PDF 没有内置目录。';return;}
   const add=(list:typeof items,depth=0)=>{for(const item of list){const b=document.createElement('button');b.textContent=item.title;b.style.paddingLeft=`${8+depth*12}px`;b.onclick=()=>void goDestination(item.dest);root.append(b);if(item.items?.length)add(item.items,depth+1);}};add(items);
@@ -186,7 +187,8 @@ async function load(bytes:ArrayBuffer){
   $('pageCount').textContent=String(pdf.numPages);scale=fitScale();sizePages();watchPages();await renderPage(pages[0]);
   status(`${pdf.numPages} 页 · 选择文字后可问 / 译（Alt+Q 聚焦）；普通阅读不会调用 AI。`);
   await send({type:'reader-loaded',documentId}).catch(()=>undefined);
-  if(init?.position)await restorePosition(init.position);
+  if(pendingReturn?.documentId===documentId){await restorePosition(pendingReturn.position);pendingReturn=undefined;}
+  else if(init?.position)await restorePosition(init.position);
   const anchor=pendingAnchor||init?.anchor;pendingAnchor=undefined;if(anchor)await navigate(anchor);
 }
 function captureSelection(){
@@ -197,7 +199,7 @@ function captureSelection(){
   const start=Number(first.dataset.page),end=Number(last.dataset.page);
   if(pages.slice(start-1,end).some(p=>!p.rendered)){status('跨页选区包含尚未绘制的页面，请逐段选择以避免漏文。');hideSelection();return;}
   selection={sessionId,documentId,text,pageStart:start,pageEnd:end,at:Date.now(),anchor:{sessionId,documentId,pageNumber:start,exactQuote:start===end?text:undefined,verification:start===end?'quote-verified':'page-only'}};
-  selectionPosition=position();const r=range.getBoundingClientRect();const bar=$('selectionActions');bar.hidden=false;
+  selectionPosition=position();selection.position=selectionPosition;const r=range.getBoundingClientRect();const bar=$('selectionActions');bar.hidden=false;
   bar.style.left=`${Math.max(8,Math.min(window.innerWidth-120,r.left))}px`;bar.style.top=`${Math.max(60,Math.min(window.innerHeight-48,r.bottom+8))}px`;
 }
 async function selectionAction(action:'ask'|'translate'){
@@ -230,9 +232,11 @@ let findTimer=0;$('findText').oninput=()=>{window.clearTimeout(findTimer);findTi
 document.addEventListener('pointerup',e=>{if(!(e.target as HTMLElement).closest('#selectionActions'))window.setTimeout(captureSelection,0);});
 document.addEventListener('keyup',e=>{if(e.key==='Shift'||e.key.startsWith('Arrow'))captureSelection();});
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='f'){e.preventDefault();toggleFind(true);}if(e.key==='Escape'){hideSelection();clearHighlights();$('outline').hidden=true;if(!$('findBar').hidden)toggleFind(false);}if(e.altKey&&e.key.toLowerCase()==='q'){captureSelection();if(!$('selectionActions').hidden){e.preventDefault();$('askSelection').focus();}}});
-window.addEventListener('scroll',()=>{hideSelection();updatePageNumber();window.clearTimeout(scrollTimer);scrollTimer=window.setTimeout(()=>{if(documentId)void send({type:'reader-position',documentId,position:position()}).catch(()=>undefined);},250);},{passive:true});
+function schedulePositionSave(){window.clearTimeout(scrollTimer);scrollTimer=window.setTimeout(()=>{if(documentId)void send({type:'reader-position',documentId,position:position()}).catch(()=>undefined);},250);}
+window.addEventListener('scroll',()=>{hideSelection();updatePageNumber();schedulePositionSave();},{passive:true});
+pagesRoot.addEventListener('scroll',()=>{hideSelection();schedulePositionSave();},{passive:true});
 let resizeTimer=0;window.addEventListener('resize',()=>{window.clearTimeout(resizeTimer);resizeTimer=window.setTimeout(()=>{if(fit)void rescale(fitScale());},200);});
-chrome.runtime.onMessage.addListener((message,sender,respond)=>{if(sender.id!==chrome.runtime.id||!sender.url?.startsWith(chrome.runtime.getURL('')))return;if(message?.sessionId!==sessionId)return;if(message.type==='reader-navigate'){void navigate(message.anchor).then(()=>respond({ok:true}));return true;}if(message.type==='reader-return'){const p=message.position||returnStack.pop();if(p)void restorePosition(p);respond({ok:true});}});
+chrome.runtime.onMessage.addListener((message,sender,respond)=>{if(sender.id!==chrome.runtime.id||!sender.url?.startsWith(chrome.runtime.getURL('')))return;if(message?.sessionId!==sessionId)return;if(message.type==='reader-navigate'){void navigate(message.anchor).then(()=>respond({ok:true}));return true;}if(message.type==='reader-return'){if(!pdf){pendingReturn={documentId:message.documentId,position:message.position};respond({ok:true});return;}if(message.documentId!==documentId)return;const p=message.position||returnStack.pop();if(p){void restorePosition(p).then(()=>{clearHighlights();status('已返回选段时的阅读位置。');respond({ok:true});});return true;}respond({ok:false});}});
 async function boot(){
   if(!sessionId)throw new Error('阅读会话缺失。请从 PaperPeek 侧栏重新打开阅读器。');
   windowId=(await chrome.tabs.getCurrent())?.windowId;

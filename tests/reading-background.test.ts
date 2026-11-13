@@ -19,7 +19,7 @@ beforeEach(async()=>{
   vi.resetModules(); entries={}; nextTab=10; createHook=undefined; tabs.clear(); tabs.set(1,{id:1,url:'https://x/article'});
   vi.stubGlobal('chrome',{
     sidePanel:{setPanelBehavior:async()=>{},open:async()=>{}},
-    runtime:{id:'test',getURL:(path:string)=>base+path,onInstalled:{addListener:()=>{}},onMessage:{addListener:(fn:any)=>{listener=fn;}},sendMessage:async()=>{}},
+    runtime:{id:'test',getURL:(path:string)=>base+path,onInstalled:{addListener:()=>{}},onMessage:{addListener:(fn:any)=>{listener=fn;}},sendMessage:vi.fn(async()=>{})},
     contextMenus:{create:()=>{},onClicked:{addListener:()=>{}}},
     tabs:{onRemoved:{addListener:(fn:any)=>{removed=fn;}},onUpdated:{addListener:(fn:any)=>{updated=fn;}},
       get:async(id:number)=>{if(!tabs.has(id))throw Error('closed');return tabs.get(id);},
@@ -73,4 +73,19 @@ describe('reading-loop service-worker boundaries',()=>{
     expect((await send({type:'reader-position',sessionId:s.sessionId,documentId:'doc',position:{pageNumber:2,scale:1,rotation:0,scrollLeft:0,scrollTop:Infinity}},sender)).error).toBeTruthy();
     expect(entries[positionKey(s.sessionId)]).toBeUndefined();
   });
+  it('preserves captured selection position and returns through the registered Reader',async()=>{
+    const session=await open();
+    const position={pageNumber:2,scrollTop:435,scrollLeft:12,scale:1.8,rotation:90};
+    const selection={sessionId:session.sessionId,documentId:'doc',text:'Evidence',pageStart:2,pageEnd:2,at:Date.now(),anchor:{sessionId:session.sessionId,documentId:'doc',pageNumber:2,verification:'quote-verified'}};
+    const sender={id:'test',url:base+'reader.html?session='+session.sessionId,tab:{id:session.readerTabId}};
+    expect(await send({type:'reader-selection',sessionId:session.sessionId,documentId:'doc',action:'ask',selection,position},sender)).toEqual({ok:true});
+    expect(entries[selectionKey(session.sessionId)].selection.position).toEqual(position);
+    entries[anchorKey(session.sessionId)]={pageNumber:3};
+    await send({type:'open-reader',workspaceTabId:session.workspaceTabId,sourceTabId:1,documentId:'doc',position});
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({type:'reader-return',sessionId:session.sessionId,documentId:'doc',position});
+    expect(entries[positionKey(session.sessionId)]).toEqual(position);
+    expect(entries[anchorKey(session.sessionId)]).toBeUndefined();
+    expect((await send({type:'reader-selection',sessionId:session.sessionId,documentId:'doc',action:'ask',selection,position:{...position,scale:NaN}},sender)).error).toBeTruthy();
+  });
+
 });

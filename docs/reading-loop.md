@@ -69,13 +69,25 @@ node scripts/browser-smoke.mjs
 # Optional: HEADED=1 CHROMIUM_PATH=/path/to/chrome node scripts/browser-smoke.mjs
 ```
 
-The harness loads the actual unpacked MV3 bundle in a fresh temporary profile,
-uses an original local PDF, exercises page/zoom/rotation/search and selection Ask,
-and records screenshots/results under the OS temporary directory. It seeds only
-synthetic session metadata; no account, key, or real paper is used. A recorded
-page-control value alone is not proof of visually correct page alignment: inspect
-the screenshots and full evidence navigation loop before reporting the Issue's
-≥95%/≥90% goals. This harness has not run successfully in the restricted executor.
+The harness is **written and syntax-checked, but not executed successfully** in
+this restricted executor. It loads the unpacked MV3 bundle in a temporary profile
+and runs the production Side Panel entrypoint in an inactive extension tab. This
+is deliberately **not** a claim to test Chrome's native Side Panel focus/lifecycle.
+It seeds dummy BYOK settings only, not workspace/session/anchor records. Synthetic
+arXiv HTML/PDF and provider responses are intercepted; other HTTP(S) is blocked.
+No live provider is contacted.
+
+Its planned assertions now exercise production source → Reader creation, all 12
+target canvases actually rendered near the viewport top (not merely input values),
+verified quote/highlight geometry intersection, page-only model hints with no
+highlight, return-position/zoom/rotation restoration, original-page protection and
+Reader reuse. It drives selection Ask/Translate through real entrypoint handlers,
+checks zero/one explicit provider calls, protects an edited draft, delays a mocked
+translation while switching to an independent same-URL tab, then checks A's result
+stays isolated. It also checks narrow panel overflow and captures dark/high-DPI
+screenshots. Selection uses a DOM Range, not a mouse or touch drag. Screenshots and
+results are written only after the corresponding steps run; failure reports name
+the failing stage. These are intended checks, **not observed passes**.
 
 ## Automated integration coverage added
 
@@ -88,3 +100,25 @@ independent same-URL tab stays separate; an already-consumed selection does not
 trigger a duplicate translation in another panel. This is **not** an installed
 browser test. `tests/translation.test.ts` checks bounded context, exact selected
 text, fidelity instructions and omission of local source paths.
+
+## Adversarial review follow-up
+
+Review found that selection return initially discarded the captured position, and
+horizontal scrolling used the window rather than the Reader's overflow container.
+Both are corrected: the selected quote now retains page, vertical scroll,
+page-container horizontal scroll, zoom and rotation through background validation,
+workspace persistence and the explicit Reader return message. Horizontal-only
+scroll and rotation/zoom now schedule position checkpoints. The Reader rejects a
+return for another document and can defer return during document loading.
+
+After these fixes, strict TypeScript and production build passed; the full **105
+Vitest tests in 18 files passed three times consecutively**. Added checks span background
+position retention/validation, Side Panel return dispatch, Reader restore and
+horizontal-only scrolling. These are deterministic mocked tests, not a replacement
+for visual desktop-Chrome verification.
+
+A nondeterministic integration-test failure was reproduced and corrected in the
+test driver: it dispatched a submit as soon as the digest DOM rendered, while
+the application was still busy saving and the Ask button remained disabled.
+The journey now waits for the actual enabled interaction state before submitting;
+three subsequent complete suite runs passed without extending timeout limits.

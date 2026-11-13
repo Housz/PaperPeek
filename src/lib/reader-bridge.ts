@@ -1,4 +1,4 @@
-import type { PdfAnchor, ReadingSelection, ReadingSession } from './reading-loop';
+import type { PdfAnchor, ReadingSelection, ReadingSession, ReadingPosition } from './reading-loop';
 export const selectionKey = (id: string) => 'paperpeek.readerSelection.' + id;
 export const positionKey = (id: string) => 'paperpeek.readerPosition.' + id;
 export const anchorKey = (id: string) => 'paperpeek.readerAnchor.' + id;
@@ -10,6 +10,6 @@ export async function loopMessage<T>(message: object): Promise<T> {
   return response as T;
 }
 export async function openReader(workspaceTabId: number, documentId: string, sourceUrl: string | null,
-  sourceTabUrl: string, sourceTabId: number, anchor?: Omit<PdfAnchor, 'sessionId' | 'documentId'>): Promise<ReadingSession> {
-  return loopMessage({ type: 'open-reader', workspaceTabId, documentId, sourceUrl, sourceTabUrl, sourceTabId, anchor });
+  sourceTabUrl: string, sourceTabId: number, anchor?: Omit<PdfAnchor, 'sessionId' | 'documentId'>, position?: ReadingPosition): Promise<ReadingSession> {
+  return loopMessage({ type: 'open-reader', workspaceTabId, documentId, sourceUrl, sourceTabUrl, sourceTabId, anchor, position });
 }

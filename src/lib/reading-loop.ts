@@ -16,6 +16,7 @@ export interface ReadingSelection {
   pageStart: number;
   pageEnd: number;
   anchor: PdfAnchor;
+  position?: ReadingPosition; // captured when the selection is completed
   at: number;
 }
 export interface ReadingSession {
@@ -113,4 +114,10 @@ export function validateSelection(selection: ReadingSelection, session: ReadingS
       selection.pageStart < 1 || selection.pageEnd < selection.pageStart || selection.pageEnd > totalPages)
     return "无法确定选区的 PDF 物理页码。";
   return null;
+}
+
+export function validReadingPosition(p: ReadingPosition | undefined, totalPages: number): boolean {
+  return !!p && Number.isSafeInteger(p.pageNumber) && p.pageNumber >= 1 && p.pageNumber <= totalPages &&
+    [p.scrollTop, p.scrollLeft, p.scale, p.rotation].every(Number.isFinite) &&
+    p.scrollTop >= 0 && p.scrollLeft >= 0 && p.scale > 0 && p.scale <= 10 && p.rotation % 90 === 0;
 }

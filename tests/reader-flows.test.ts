@@ -125,6 +125,7 @@ function click(id: string): void { byId<HTMLButtonElement>(id).click(); }
 async function analyzed(): Promise<void> {
   await vi.waitFor(() => {
     expect(byId("overviewContent").hidden).toBe(false);
+    expect(byId<HTMLButtonElement>("askBtn").disabled).toBe(false);
     expect(byId("cardText") as HTMLTextAreaElement).toHaveProperty("value", expect.stringContaining("## TL;DR"));
   }, { timeout: 10000 });
 }
@@ -139,6 +140,7 @@ function selectionRequest(action: 'ask' | 'translate', id = 'selection-1'): void
   const sessionId = 'session-101', documentId = 'sha256:paper-a';
   const request = { action, requestId: id, selection: { sessionId, documentId,
     text: 'Results improved accuracy on three datasets.', pageStart: 2, pageEnd: 2, at: Date.now(),
+    position: {pageNumber:2,scrollTop:435,scrollLeft:12,scale:1.8,rotation:90},
     anchor: { sessionId, documentId, pageNumber: 2, exactQuote: 'Results improved accuracy on three datasets.', verification: 'quote-verified' } } };
   const key = 'paperpeek.readerSelection.' + sessionId; storage[key] = request;
   for (const callback of events.storage) callback({ [key]: { newValue: request } }, 'session');
@@ -185,6 +187,7 @@ describe("reader journeys (actual Side Panel DOM with mocked Chrome/API)", () =>
     setTab(101, "https://arxiv.org/pdf/2601.00001#page=2");
     await vi.waitFor(() => expect(byId("paperTitle").textContent).toBe("Paper A"));
     expect(byId("overviewContent").hidden).toBe(false);
+    expect(byId<HTMLButtonElement>("askBtn").disabled).toBe(false);
     expect(document.querySelectorAll(".message.assistant")).toHaveLength(1);
     expect(byId<HTMLTextAreaElement>("askInput").value).toBe("Follow-up draft (not sent)");
     expect(byId("view-ask").hidden).toBe(false);
@@ -243,6 +246,7 @@ describe("reader journeys (actual Side Panel DOM with mocked Chrome/API)", () =>
     expect(activeTab.url).toBe('https://arxiv.org/pdf/2601.00001');
     expect(chrome.tabs.update).not.toHaveBeenCalled();
     expect(byId("overviewContent").hidden).toBe(false);
+    expect(byId<HTMLButtonElement>("askBtn").disabled).toBe(false);
     expect(byId<HTMLTextAreaElement>("cardText").value).toContain("Paper A");
 
     click("tab-ask");
@@ -408,6 +412,13 @@ describe("reader journeys (actual Side Panel DOM with mocked Chrome/API)", () =>
     await vi.waitFor(() => expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({type:'reader-consume'})));
     await new Promise(resolve => setTimeout(resolve, 30));
     expect(mock.generate).toHaveBeenCalledTimes(calls);
+  });
+
+  it('returns a selected passage to its captured reading position instead of a new page jump',async()=>{
+    await openLoop();selectionRequest('ask');
+    await vi.waitFor(()=>expect(byId('selectionDraft').hidden).toBe(false));
+    [...byId('selectionDraft').querySelectorAll('button')].find(b=>b.textContent==='返回原文')!.click();
+    await vi.waitFor(()=>expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({type:'open-reader',position:{pageNumber:2,scrollTop:435,scrollLeft:12,scale:1.8,rotation:90},anchor:undefined})));
   });
 
 });

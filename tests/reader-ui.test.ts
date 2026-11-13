@@ -63,8 +63,25 @@ describe('Reader UI (PDF canvas and Chrome mocked; not browser acceptance)',()=>
     document.dispatchEvent(new KeyboardEvent('keyup',{key:'Shift'}));
     expect(byId('selectionActions').hidden).toBe(false);byId('askSelection').click();await settle();
     const request=mocks.send.mock.calls.map(([m])=>m).find(m=>m.type==='reader-selection');
-    expect(request.action).toBe('ask');expect(request.selection.text).toBe('Evidence on page 1.');expect(request.selection.documentId).toBe(init.documentId);
+    expect(request.selection.position).toEqual(expect.objectContaining({scale:expect.any(Number),rotation:0}));expect(request.action).toBe('ask');expect(request.selection.text).toBe('Evidence on page 1.');expect(request.selection.documentId).toBe(init.documentId);
     expect(span.textContent).toBe('Evidence on page 1.');expect(mocks.open).toHaveBeenCalled();
+  });
+
+  it('restores selected scroll, zoom and rotation only for the matching document',async()=>{
+    await import('../src/reader');await settle();
+    const position={pageNumber:2,scrollTop:435,scrollLeft:12,scale:1.8,rotation:90};
+    const reply=vi.fn();
+    mocks.listeners[0]({type:'reader-return',sessionId:'session-a',documentId:init.documentId,position},{id:'test-extension',url:'chrome-extension://test-extension/background.js'},reply);
+    await settle();expect(window.scrollTo).toHaveBeenLastCalledWith(0,435);expect(byId('pages').scrollLeft).toBe(12);expect(byId('fitWidth').textContent).toBe('180%');expect(reply).toHaveBeenCalledWith({ok:true});
+    reply.mockClear();mocks.listeners[0]({type:'reader-return',sessionId:'session-a',documentId:'other',position},{id:'test-extension',url:'chrome-extension://test-extension/background.js'},reply);
+    await settle();expect(reply).not.toHaveBeenCalled();
+  });
+
+  it('checkpoints horizontal page-container scrolling without a window scroll',async()=>{
+    await import('../src/reader');await settle();
+    byId('pages').scrollLeft=177;byId('pages').dispatchEvent(new Event('scroll'));
+    await new Promise(resolve=>setTimeout(resolve,300));
+    expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({type:'reader-position',position:expect.objectContaining({scrollLeft:177})}));
   });
 
 });

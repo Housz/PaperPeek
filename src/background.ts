@@ -1,4 +1,4 @@
-import { ensureReadingSession, getReadingSession, attachReader, detachSessionTab, validateSelection, sessionForTab } from "./lib/reading-loop";
+import { ensureReadingSession, getReadingSession, attachReader, detachSessionTab, validateSelection, validReadingPosition, sessionForTab } from "./lib/reading-loop";
 import { anchorKey, positionKey, selectionKey, type SelectionRequest } from "./lib/reader-bridge";
 import { saveTabWorkspace, unpackWorkspace, workspaceKey, workspaceMatchesTab, blankWorkspace } from "./lib/tab-workspace";
 
@@ -83,6 +83,11 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
           message.anchor.pageNumber > original.paper.totalPages ||
           (message.anchor.exactQuote !== undefined && (typeof message.anchor.exactQuote !== 'string' || message.anchor.exactQuote.length > 12000))))
         throw new Error('无效的 PDF 页码或引文。');
+      if (message.position && !validReadingPosition(message.position, original.paper.totalPages)) throw new Error('无效的选区阅读位置。');
+      if (message.position) {
+        await chrome.storage.session.set({ [positionKey(session.sessionId)]: message.position });
+        await chrome.storage.session.remove(anchorKey(session.sessionId));
+      }
       if (session.workspaceTabId !== message.workspaceTabId)
         await saveTabWorkspace({ ...original, tabId: session.workspaceTabId });
       if (message.anchor) await chrome.storage.session.set({ [anchorKey(session.sessionId)]:
@@ -97,7 +102,8 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
         await attachReader(session.sessionId, reader.id);
       } else {
         await chrome.tabs.update(reader.id!, { active: true });
-        if (message.anchor) void chrome.runtime.sendMessage({ type: 'reader-navigate', sessionId: session.sessionId,
+        if (message.position) void chrome.runtime.sendMessage({ type: 'reader-return', sessionId: session.sessionId, documentId: session.documentId, position: message.position }).catch(() => undefined);
+        else if (message.anchor) void chrome.runtime.sendMessage({ type: 'reader-navigate', sessionId: session.sessionId,
           documentId: session.documentId, anchor: { ...message.anchor, sessionId: session.sessionId, documentId: session.documentId } }).catch(() => undefined);
       }
       return { ...session, readerTabId: reader.id };
@@ -138,7 +144,9 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     const error = validateSelection(message.selection, session, workspace?.paper?.totalPages || 0);
     if (error) throw new Error(error);
     if (message.action !== 'ask' && message.action !== 'translate') throw new Error('未知选区操作。');
-    const request: SelectionRequest = { action: message.action, selection: message.selection, requestId: crypto.randomUUID() };
+    const position = message.selection.position || message.position;
+    if (position && !validReadingPosition(position, workspace?.paper?.totalPages || 0)) throw new Error('无效的选区阅读位置。');
+    const request: SelectionRequest = { action: message.action, selection: { ...message.selection, position }, requestId: crypto.randomUUID() };
     await chrome.storage.session.set({ [selectionKey(id)]: request });
     return { ok: true };
   };
