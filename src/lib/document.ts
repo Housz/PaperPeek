@@ -1,3 +1,4 @@
+import { fingerprintPdf } from "./anchors";
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { Paper, PaperPage } from "../types";
@@ -53,6 +54,7 @@ export async function parsePdf(bytes: ArrayBuffer, sourceUrl: string | null): Pr
   if (bytes.byteLength > MAX_PDF_BYTES) throw new Error("PDF exceeds 25 MB limit.");
   const header = new TextDecoder("ascii").decode(bytes.slice(0, 1024));
   if (!header.includes("%PDF-")) throw new Error("此地址返回的不是 PDF 文件。请尝试重新检测或手动打开 PDF。");
+  const documentId = await fingerprintPdf(bytes);
   const loading = getDocument({ data: new Uint8Array(bytes) });
   const pdf = await loading.promise;
   try {
@@ -84,6 +86,7 @@ export async function parsePdf(bytes: ArrayBuffer, sourceUrl: string | null): Pr
     const fallbackTitle = sourceUrl?.split("/").pop()?.split("?")[0] || "Untitled paper";
     const paper: Paper = {
       id: crypto.randomUUID(),
+      documentId,
       title: title || fallbackTitle,
       authors,
       sourceUrl,

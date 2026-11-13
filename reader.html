@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PaperPeek 阅读器</title></head>
+<body>
+<header class="toolbar" aria-label="PDF 阅读工具">
+  <strong class="brand">PaperPeek</strong>
+  <button id="previous" title="上一页" aria-label="上一页">‹</button>
+  <label class="page-control"><span class="sr-only">PDF 物理页码</span><input id="pageNumber" type="number" min="1" value="1" aria-label="PDF 物理页码"> / <span id="pageCount">–</span></label>
+  <button id="next" title="下一页" aria-label="下一页">›</button>
+  <button id="zoomOut" aria-label="缩小">−</button><button id="fitWidth">适合宽度</button><button id="zoomIn" aria-label="放大">+</button>
+  <button id="findToggle" aria-label="搜索 PDF" aria-expanded="false">搜索</button>
+  <button id="returnPosition" disabled>返回阅读处</button>
+  <details class="more"><summary aria-label="更多阅读操作">更多</summary><div>
+    <button id="rotate">旋转 90°</button><button id="outlineToggle">目录</button><button id="source">打开原来源</button><button id="chooseFile">重新选择 PDF</button>
+  </div></details>
+</header>
+<section id="findBar" hidden aria-label="搜索"><label for="findText">查找</label><input id="findText" type="search" maxlength="300" placeholder="搜索原文"><button id="findPrevious" aria-label="上一个匹配">↑</button><button id="findNext" aria-label="下一个匹配">↓</button><span id="findCount" aria-live="polite"></span><button id="findClose" aria-label="关闭搜索">×</button></section>
+<div id="status" role="status" aria-live="polite">正在打开 PDF…</div>
+<aside id="outline" hidden aria-label="PDF 目录"></aside>
+<main id="pages" tabindex="0" aria-label="PDF 正文"></main>
+<div id="selectionActions" role="toolbar" aria-label="选段操作" hidden><button id="askSelection">问</button><button id="translateSelection">译</button></div>
+<input id="fileInput" type="file" accept="application/pdf,.pdf" hidden>
+<script type="module" src="/src/reader.ts"></script>
+</body></html>

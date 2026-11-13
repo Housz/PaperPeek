@@ -3,6 +3,7 @@ export type Provider = "gemini" | "openai" | "deepseek";
 export interface PaperPage { page: number; text: string }
 export interface Paper {
   id: string;
+  documentId?: string; // SHA-256 of original PDF bytes, never a source URL
   title: string;
   authors?: string;
   sourceUrl: string | null;

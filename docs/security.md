@@ -47,3 +47,12 @@ Client-only BYOK is not equivalent to a backend secret management solution. Pass
 - PDF citation hints are converted only from plain text nodes outside code/links and cannot execute instructions.
 - Rendered formatting is a presentation layer only. `toMarkdown` output, source evidence validation and clipboard/download keep their existing semantics.
 - Regression tests must include script/link injection attempts and excessively long model responses.
+
+## Reading Loop branch
+
+- Explicit “译” is a model transmission; ordinary reading and “问” draft creation are not. Selected text plus bounded nearby context is sent only to the chosen existing provider.
+- Raw PDF bytes and rendered canvas/text layers stay in live extension memory. No IndexedDB, permanent library, cookies, telemetry, remote PDF.js resources or MIME interception were introduced.
+- PDF content identity is SHA-256, distinct from random session identity. A mismatch aborts navigation; reselecting a different file cannot silently reuse an old discussion.
+- Reader messages are restricted to extension pages and the session's registered Reader tab. Source-page scripts cannot submit external messages.
+- PDF link annotations allow only HTTP(S) external links with no referrer and explicit clicks. Script/actions embedded in PDFs are not executed.
+- Session state includes selected quotes and reading positions but never API credentials. Closing the last source/Reader clears state; closing the Side Panel can interrupt in-flight model calls.

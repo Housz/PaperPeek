@@ -1,3 +1,6 @@
+import { getReadingSession, sessionForTab, sessionForWorkspace, type ReadingSession, type ReadingSelection } from "./lib/reading-loop";
+import { openReader, selectionKey, loopMessage, type SelectionRequest } from "./lib/reader-bridge";
+import { translationPrompt } from "./lib/translation";
 import type { ChatMessage, Digest, Paper, Provider } from "./types";
 import { DEFAULT_MODELS } from "./types";
 import { fetchPdf, parsePdf } from "./lib/document";
@@ -71,6 +74,14 @@ const settingsForm = byId<HTMLFormElement>("settingsForm");
 const testBtn = byId<HTMLButtonElement>("testBtn");
 const clearKeyBtn = byId<HTMLButtonElement>("clearKeyBtn");
 
+const openReaderBtn = byId<HTMLButtonElement>("openReaderBtn");
+const selectionDraft = byId("selectionDraft");
+const pendingSelection = byId("pendingSelection");
+let draftSelection: ReadingSelection | undefined;
+let activeReadingSession: ReadingSession | null = null;
+let visibleTabId: number | undefined;
+let handledSelection = '';
+const localPdfBytes = new Map<string, ArrayBuffer>();
 const workspaces = new TabWorkspaceManager();
 const pendingTabs = new Set<number>();
 let activeTabId: number | undefined;
@@ -112,6 +123,7 @@ function setBusy(value: boolean, tabId = activeTabId): void {
   if (tabId !== activeTabId) return;
   busy = value;
   analyzeBtn.disabled = value;
+  openReaderBtn.disabled = value;
   detectBtn.disabled = value;
   askBtn.disabled = value || !paper;
   askInput.disabled = value || !paper;
@@ -120,6 +132,7 @@ function setBusy(value: boolean, tabId = activeTabId): void {
   emptyAction.disabled = value;
   sourceChooseBtn.disabled = value;
   renderPaperState();
+  if (!value) void consumeReaderSelection();
 }
 function setView(view: string): void {
   currentView = view;
@@ -164,6 +177,7 @@ function currentWorkspaceSnapshot(): TabWorkspace | null {
     digest,
     conversation: conversation.map(message => ({ ...message })),
     draft: askInput.value,
+    selection: draftSelection,
     view: lastReadingView === "ask" || lastReadingView === "card"
       ? lastReadingView : "overview"
   };
@@ -174,7 +188,11 @@ function checkpointWorkspace(): void {
   if (restoringWorkspace || activeTabId === undefined) return;
   const snapshot = currentWorkspaceSnapshot();
   if (!snapshot) return;
-  void workspaces.save(snapshot).catch(() => {
+  void (async () => {
+    if (snapshot.tabId >= 1e12 && !(await sessionForWorkspace(snapshot.tabId))) return;
+    await workspaces.save(snapshot);
+    if (snapshot.tabId >= 1e12 && !(await sessionForWorkspace(snapshot.tabId))) await workspaces.close(snapshot.tabId);
+  })().catch(() => {
     if (activeTabId === snapshot.tabId)
       showStatus("临时会话保存失败。请复制重要结果，或关闭其他论文标签后重试。", true);
   });
@@ -191,6 +209,9 @@ function restoreWorkspace(state: TabWorkspace): void {
     digest = state.digest;
     conversation = state.conversation.map(item => ({ ...item }));
     askInput.value = state.draft;
+    draftSelection = state.selection;
+    renderSelectionDraft();
+    pendingSelection.hidden = true;
     cardText.value = paper && digest ? toMarkdown(paper, digest) : "";
     lastReadingView = state.view;
     renderSourceChooser();
@@ -211,6 +232,7 @@ function isCurrentPaper(tabId: number, paperId: string): boolean {
 async function updatePaperResult(
   tabId: number, paperId: string, update: (workspace: TabWorkspace) => void
 ): Promise<boolean> {
+  if (tabId >= 1e12 && !(await sessionForWorkspace(tabId))) return false;
   // The cache changes synchronously. Update the visible view BEFORE awaiting
   // storage: otherwise a tab-switch checkpoint could overwrite this new result.
   const pendingSave = workspaces.updatePaper(tabId, paperId, update);
@@ -355,7 +377,7 @@ function renderOverview(): void {
       const page = finding.page;
       const badge = create("button", "page-link", "PDF p." + page + " ↗");
       badge.type = "button";
-      badge.addEventListener("click", () => void navigateToPage(page));
+      badge.addEventListener("click", () => void navigateToPage(page, finding.quote));
       item.append(badge);
     } else {
       item.append(create("small", "unverified", "原文位置未验证"));
@@ -383,7 +405,7 @@ function renderChat(): void {
     if (message.role === "assistant") {
       body.classList.add("markdown-prose");
       renderMarkdownInto(body, message.text);
-      if (paper?.sourceUrl)
+      if (paper)
         attachPdfPageHints(body, paper.totalPages, page => void navigateToPage(page));
     } else {
       // User input remains literal text; never interpret user-authored HTML.
@@ -409,13 +431,8 @@ function renderCard(): void {
   cardModeBtn.textContent = cardSourceMode ? "显示预览" : "查看源码";
   cardModeBtn.setAttribute("aria-pressed", String(cardSourceMode));
 }
-async function navigateToPage(page: number): Promise<void> {
-  if (!paper?.sourceUrl || activeTabId === undefined) {
-    showStatus("本地导入的 PDF 暂不支持自动跳转，请在原阅读器中定位。", true);
-    return;
-  }
-  try { await chrome.tabs.update(activeTabId, { url: sourcePageUrl(paper.sourceUrl, page) }); }
-  catch { showStatus("无法自动跳转 PDF；可手动查看第 " + page + " 页。", true); }
+async function navigateToPage(page: number, quote?: string): Promise<void> {
+  await readInPaperPeek(page, quote);
 }
 function tabIdentity(raw?: string): string {
   if (!raw) return "";
@@ -456,8 +473,16 @@ async function refreshActiveTab(thorough = false, rescan = false): Promise<void>
   const generation = ++scanGeneration;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (generation !== scanGeneration) return;
-  const url = tabIdentity(tab?.url);
-  const id = tab?.id;
+  visibleTabId = tab?.id;
+  let related = tab?.id !== undefined ? await sessionForTab(tab.id) : null;
+  if (related && related.sourceTabId === tab?.id && !workspaceMatchesTab(
+      { ...blankWorkspace(related.workspaceTabId, related.sourceTabUrl), selectedPdfUrl: related.sourceUrl }, tabIdentity(tab?.url))) {
+    await loopMessage({ type: 'reader-detach', tabId: tab.id }); related = null;
+  }
+  if (generation !== scanGeneration) return;
+  activeReadingSession = related;
+  const url = related ? related.sourceTabUrl : tabIdentity(tab?.url);
+  const id = related ? related.workspaceTabId : tab?.id;
   const changed = id !== activeTabId || url !== tabUrl;
 
   if (changed) {
@@ -495,6 +520,7 @@ async function refreshActiveTab(thorough = false, rescan = false): Promise<void>
     }
   }
 
+  if (related) { await consumeReaderSelection(); return; }
   const stillCurrent = () =>
     generation === scanGeneration && activeTabId === id && tabUrl === url;
   const allowed = await fileAccessAllowed();
@@ -621,11 +647,13 @@ async function acceptParsedPaper(
   target.digest = null;
   target.conversation = [];
   target.draft = "";
+  target.selection = undefined;
   target.view = "overview";
   const pendingSave = workspaces.save(target);
   if (activeTabId === tabId && (expectedSource === null || activePdfUrl === expectedSource)) {
     activePdfUrl = expectedSource;
     paper = loaded;
+    draftSelection = undefined; renderSelectionDraft();
     digest = null;
     conversation = [];
     askInput.value = "";
@@ -672,7 +700,7 @@ async function analyzeCurrent(): Promise<void> {
     if (!target || target.selectedPdfUrl !== source) return;
     if (activeTabId === tabId) showStatus("正在提取 PDF 正文……");
     const bytes = await fetchPdf(source);
-    loaded = await parsePdf(bytes, source);
+    loaded = await parsePdf(bytes.slice(0), source);
     if (!(await acceptParsedPaper(tabId, loaded, source))) loaded = null;
   } catch (error) {
     if (activeTabId === tabId)
@@ -690,7 +718,12 @@ async function openLocal(file: File): Promise<void> {
   setBusy(true, tabId);
   if (activeTabId === tabId) showStatus("正在读取本地 PDF……");
   try {
-    loaded = await parsePdf(await file.arrayBuffer(), null);
+    const bytes = await file.arrayBuffer();
+    loaded = await parsePdf(bytes.slice(0), null);
+    if (loaded.documentId) {
+      localPdfBytes.set(loaded.documentId, bytes);
+      while (localPdfBytes.size > 3) localPdfBytes.delete(localPdfBytes.keys().next().value!);
+    }
     if (!loaded.title || loaded.title === "Untitled paper")
       loaded.title = file.name.replace(/\.pdf$/i, "");
     if (!(await acceptParsedPaper(tabId, loaded, null))) loaded = null;
@@ -711,6 +744,10 @@ async function ask(question: string): Promise<void> {
   const tabId = activeTabId;
   const targetPaper = paper;
   const history = conversation.slice(-6);
+  const selected = draftSelection?.documentId === targetPaper.documentId ? draftSelection : undefined;
+  const prompt = askPrompt(targetPaper, question, history) + (selected
+    ? `\n<selected-passage-untrusted page="${selected.pageStart}">\n${selected.text.slice(0,6000)}\n</selected-passage-untrusted>` : '');
+  if (selected) question = `选区 [PDF p.${selected.pageStart}]：\n${selected.text}\n\n问题：${question}`;
   conversation.push({ role: "user", text: question });
   checkpointWorkspace();
   renderChat();
@@ -718,7 +755,7 @@ async function ask(question: string): Promise<void> {
   setBusy(true, tabId);
   showStatus("正在基于当前论文回答……");
   try {
-    const request = currentRequest(askPrompt(targetPaper, question, history));
+    const request = currentRequest(prompt);
     const answer = await generateText(request);
     const updated = await updatePaperResult(tabId, targetPaper.id, ws => {
       ws.conversation.push({ role: "assistant", text: answer });
@@ -729,6 +766,7 @@ async function ask(question: string): Promise<void> {
       showStatus(error instanceof Error ? error.message : "提问失败。", true);
   } finally {
     setBusy(false, tabId);
+    void consumeReaderSelection();
   }
 }
 
@@ -996,14 +1034,22 @@ byId("downloadBtn").addEventListener("click", () => {
 });
 chrome.tabs.onActivated.addListener(() => void refreshActiveTab());
 chrome.tabs.onUpdated.addListener((tabId, info) => {
-  if (tabId !== activeTabId) return;
+  if (tabId !== visibleTabId) return;
   if (info.url) void refreshActiveTab();
   else if (info.status === "complete") void refreshActiveTab(false, true);
 });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "session" && changes["paperpeek.selection"]) void acceptSelection();
+  if (area === "session" && activeReadingSession && changes[selectionKey(activeReadingSession.sessionId)]) void consumeReaderSelection();
 });
 chrome.tabs.onRemoved.addListener(tabId => {
+  if (activeReadingSession && (tabId === activeReadingSession.sourceTabId || tabId === activeReadingSession.readerTabId)) {
+    const owner = activeReadingSession.workspaceTabId;
+    void loopMessage<{ deleteWorkspaceTabId?: number }>({ type: 'reader-detach', tabId }).then(async result => {
+      if (!(await sessionForWorkspace(owner))) { pendingTabs.delete(owner); await workspaces.close(owner); }
+      await refreshActiveTab();
+    }); return;
+  }
   pendingTabs.delete(tabId);
   void workspaces.close(tabId).catch(() => undefined);
   if (activeTabId === tabId) {
@@ -1035,4 +1081,112 @@ async function init(): Promise<void> {
   // The last reading destination is scoped to the restored tab.
   setView(lastReadingView);
 }
+async function readInPaperPeek(page?: number, quote?: string): Promise<void> {
+  if (busy || activeTabId === undefined || visibleTabId === undefined) return;
+  const origin = activeTabId;
+  try {
+    if (!paper) {
+      if (!activePdfUrl) throw new Error('请先选择 PDF 或本地文件。');
+      const source = activePdfUrl;
+      if (!(await requestHostAccess(source))) throw new Error('需要授权此 PDF 网站。');
+      setBusy(true, origin);
+      const bytes = await fetchPdf(source);
+      const loaded = await parsePdf(bytes.slice(0), source);
+      if (!(await acceptParsedPaper(origin, loaded, source))) return;
+
+      if (activeTabId !== origin) return;
+    }
+    if (!paper?.documentId) throw new Error('此旧会话尚无内容指纹，请重新加载 PDF 后开启阅读器。');
+    const snapshot = currentWorkspaceSnapshot();
+    if (snapshot) await workspaces.save(snapshot);
+    const target = paper;
+    const session = await openReader(origin, target.documentId!, target.sourceUrl, tabUrl,
+      activeReadingSession?.sourceTabId ?? visibleTabId,
+      page === undefined ? undefined : { pageNumber: page, exactQuote: quote, verification: quote ? 'quote-verified' : 'model-hint' });
+    // The background copied the checkpoint before opening/activating the Reader.
+    // Never overwrite it with a stale pre-navigation snapshot.
+    if (activeTabId === origin) { activeTabId = session.workspaceTabId; activeReadingSession = session; }
+    await refreshActiveTab();
+  } catch (error) {
+    showStatus(error instanceof Error ? error.message : '阅读器打开失败。原网页和分析已保留。', true);
+  } finally { setBusy(false, origin); }
+}
+
+function renderSelectionDraft(): void {
+  selectionDraft.replaceChildren();
+  selectionDraft.hidden = !draftSelection;
+  if (!draftSelection) return;
+  const selected = draftSelection;
+  selectionDraft.append(create('span', '', `PDF 第 ${selected.pageStart}${selected.pageEnd === selected.pageStart ? '' : '–' + selected.pageEnd} 页 · 已选 ${selected.text.length} 字符`),
+    create('blockquote', '', selected.text));
+  const back = create('button', 'button button-secondary', '返回原文');
+  back.type = 'button'; back.onclick = () => void readInPaperPeek(selected.pageStart, selected.anchor.exactQuote);
+  const remove = create('button', 'button button-secondary', '移除引用');
+  remove.type = 'button'; remove.onclick = () => { draftSelection = undefined; renderSelectionDraft(); checkpointWorkspace(); };
+  const translate = create('button', 'button button-secondary', '翻译此选区');
+  translate.type = 'button'; translate.onclick = () => { if (!busy) void translateSelection(selected); };
+  selectionDraft.append(back, translate, remove);
+}
+
+async function consumeReaderSelection(): Promise<void> {
+  if (!activeReadingSession || !paper || activeTabId === undefined) return;
+  const session = activeReadingSession;
+  const key = selectionKey(session.sessionId);
+  const request = (await chrome.storage.session.get(key))[key] as SelectionRequest | undefined;
+  if (!request || request.requestId === handledSelection || request.selection.documentId !== paper.documentId) return;
+  if (busy) { showStatus('选区已保留，当前请求完成后可继续。'); return; }
+  const apply = async () => {
+    handledSelection = request.requestId;
+    pendingSelection.hidden = true;
+    const claim = await loopMessage<{ consumed: boolean }>({ type: 'reader-consume', sessionId: session.sessionId, requestId: request.requestId });
+    if (!claim.consumed) return;
+    if (activeReadingSession?.sessionId !== session.sessionId) return;
+    draftSelection = request.selection;
+    renderSelectionDraft();
+    setView('ask');
+    checkpointWorkspace();
+    if (request.action === 'translate') await translateSelection(request.selection);
+    else { showStatus('选区已加入草稿，填写问题后再发送。'); askInput.focus(); }
+  };
+  if (askInput.value.trim() || draftSelection) {
+    pendingSelection.replaceChildren(create('span', '', '有新的选区。保留当前草稿，还是使用新选区？'));
+    const replace = create('button', 'button button-secondary', '使用新选区');
+    replace.onclick = () => { askInput.value = ''; void apply(); };
+    const dismiss = create('button', 'button button-secondary', '保留当前草稿');
+    dismiss.onclick = () => { handledSelection = request.requestId; pendingSelection.hidden = true; void loopMessage({ type: 'reader-consume', sessionId: session.sessionId, requestId: request.requestId }); };
+    pendingSelection.append(replace, dismiss); pendingSelection.hidden = false; setView('ask');
+  } else await apply();
+}
+
+async function translateSelection(selection: ReadingSelection): Promise<void> {
+  if (!paper || activeTabId === undefined) return;
+  if (!credentials.apiKey.trim()) { setView('settings'); showStatus('请先配置服务商，再在原文点击“译”。选区已保留。'); return; }
+  const target = paper, owner = activeTabId;
+  conversation.push({ role: 'user', text: `翻译选区 [PDF p.${selection.pageStart}]\n${selection.text}` });
+  checkpointWorkspace(); renderChat(); setBusy(true, owner); showStatus('正在翻译选区……');
+  try {
+    const answer = await generateText(currentRequest(translationPrompt(target, selection)));
+    await updatePaperResult(owner, target.id, ws => { ws.conversation.push({ role: 'assistant', text: answer }); });
+    if (isCurrentPaper(owner, target.id)) showStatus('译文已保留，可继续追问或返回原文。');
+  } catch (error) {
+    if (isCurrentPaper(owner, target.id)) showStatus(error instanceof Error ? error.message : '翻译失败，可重试。', true);
+  } finally { setBusy(false, owner); }
+}
+
+// Raw local PDF bytes exist only while this panel remains alive, never in storage.
+chrome.runtime.onMessage?.addListener((message, sender, respond) => {
+  if (message?.type !== 'reader-bytes' || sender.id !== chrome.runtime.id ||
+      !sender.url?.startsWith(chrome.runtime.getURL('reader.html'))) return;
+  void getReadingSession(message.sessionId).then(session => {
+    if (!session || session.documentId !== message.documentId || session.readerTabId !== sender.tab?.id) { respond({}); return; }
+    const bytes = localPdfBytes.get(session.documentId);
+    if (!bytes) { respond({}); return; }
+    let binary = ''; const view = new Uint8Array(bytes);
+    for (let i = 0; i < view.length; i += 8192) binary += String.fromCharCode(...view.subarray(i, i + 8192));
+    respond({ base64: btoa(binary) });
+  }).catch(() => respond({}));
+  return true;
+});
+
+openReaderBtn.addEventListener("click", () => void readInPaperPeek());
 void init();

@@ -6,6 +6,14 @@ PaperPeek 是一个面向科研人员的 Chrome 侧边栏扩展，帮助理解**
 
 > Status: **v0.1.5 experimental MVP**. Public arXiv PDFs are the primary test target. Not a PDF replacement, citation manager, archive or multi-paper knowledge base.
 
+## Reading Loop 开发分支（Issue #14，未发布）
+
+此分支新增按需开启的 **PaperPeek Reader**，不接管默认 PDF：侧栏“在 PaperPeek 中阅读”打开主阅读区；证据点击复用 Reader，核实后可返回阅读位置。PDF 选段后“问”进入可编辑草稿，“译”才主动发出翻译请求，仍使用原侧栏和 BYOK 设置。
+
+原网页与 Reader 共享临时阅读会话，另行打开的同 URL 标签仍独立。手动 PDF 字节仅存在活动页面内存，丢失后需重选同文件。实现和验证范围见 [Reading Loop 验收记录](docs/reading-loop.md)。本分支没有发布安装包、合并 main 或运行 Actions；真实桌面扩展验收与真人观察仍待完成。
+
+开发者安装：`npm ci` → `npm run check && npm test && npm run build`，在独立测试浏览器配置中加载 `dist/`。不要用开发分支覆盖仍需保留的旧扩展配置。
+
 ## Current features (v0.1.5)
 
 - **Markdown 正常排版（修复 #7）**：AI 解读中的标题、粗体、列表、表格与代码块会正确渲染。Paper Card 默认预览，仍可查看/复制/保存原始 Markdown。

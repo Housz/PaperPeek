@@ -82,3 +82,11 @@ See [tab sessions](tab-sessions.md) and [verification](verification.md).
 `src/lib/markdown-view.ts` is the single local Markdown rendering boundary for untrusted model explanations and the Paper Card preview. It uses `markdown-it` (HTML disabled, executable/unsupported links rejected, remote images disabled) and DOMParser. `renderChat()` renders assistant messages with this boundary and then transforms safe plain-text `[PDF p.N]` hints into unverified navigation buttons. Paper Card uses the existing deterministic Markdown string for copy/download and shows a separate preview DOM; no double model invocation.
 
 Issue #11 icons live in `public/icons/` and are copied by Vite into `dist/icons/`, referenced from Manifest V3 `icons` and `action.default_icon`. CI and Release enforce the presence of each size.
+
+## Reading Loop development (#14)
+
+See [Reading Loop](reading-loop.md) and [ADR](decisions/0002-reading-loop.md). The Reader is a separate extension page, not a second chatbot. Side Panel parses the explicitly chosen PDF and hashes original bytes; background binds a new random readingSessionId and synthetic workspace ID to source/Reader tab IDs. SHA-256 documentId detects changed bytes even at the same URL. Source navigation detaches the old session without overwriting its still-open Reader. Last associated tab closure removes transient state.
+
+Reader fetches public/permissioned source without cookies, or requests locally imported bytes from the live panel. Bytes remain only in memory; missing local bytes require reselecting the same-content PDF. The expected hash is checked before render or navigation. PDF.js canvas/text layers render near the viewport; search/outline never contact AI. Exact quote matching is deterministic and ambiguous or geometry-incomplete anchors fall back to a physical page.
+
+Selection messages are checked against the registered Reader tab/session/document. Ask creates an editable selected-quote draft; Translate uses `lib/translation.ts` with bounded neighboring page context, not full-paper context. AI results update their originating workspace and never the currently focused paper by assumption.

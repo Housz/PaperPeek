@@ -269,3 +269,8 @@ textarea::placeholder, input::placeholder { color: var(--faint); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0s !important; transition-duration: 0s !important; }
 }
+
+.reader-entry { margin: 0 0 10px; width: 100%; }
+.selection-draft { padding: 8px; margin: 8px 0; border-left: 3px solid var(--accent, #6d78c9); font-size: 12px; overflow-wrap: anywhere; }
+.selection-draft blockquote { margin: 4px 0; max-height: 90px; overflow: auto; white-space: pre-wrap; }
+.selection-draft button { margin: 4px 8px 0 0; }

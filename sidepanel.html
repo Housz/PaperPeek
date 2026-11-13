@@ -40,6 +40,8 @@
     <main class="workspace">
       <div id="status" class="status" role="status" aria-live="polite" hidden></div>
 
+      <button id="openReaderBtn" type="button" class="button button-secondary reader-entry">在 PaperPeek 中阅读</button>
+
       <nav id="primaryTabs" class="tabbar" role="tablist" aria-label="阅读内容">
         <button id="tab-overview" role="tab" aria-controls="view-overview" class="tab active" data-tab="overview" type="button" aria-selected="true">概览</button>
         <button id="tab-ask" role="tab" aria-controls="view-ask" class="tab" data-tab="ask" type="button" aria-selected="false">提问</button>
@@ -82,6 +84,8 @@
           <p class="micro-label">可以这样提问</p>
           <div id="presetList"></div>
         </div>
+        <div id="selectionDraft" class="selection-draft" hidden></div>
+        <div id="pendingSelection" class="selection-draft" hidden></div>
         <form id="askForm" class="ask-form">
           <label for="askInput" class="sr-only">向当前论文提问</label>
           <textarea id="askInput" rows="2" maxlength="3000" placeholder="向这篇论文提问…"></textarea>

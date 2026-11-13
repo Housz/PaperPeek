@@ -91,3 +91,12 @@ All notable changes are recorded here. Versions follow semantic versioning for M
 - No PDF.js interactive viewer, precision selection/highlight, multimodal image crop, OCR or multi-paper features.
 - Model-suggested page hints inside free-form chat are not source-verified.
 - Browser-only keys are not a hardened secret store. Live model/PDF browser tests must be run by an authorized key holder.
+
+## Unreleased — Issue #14 Reading Loop branch
+
+- Opt-in full-tab PDF.js Reader with page controls, fit/zoom, search, outline, rotation, selectable text, internal links and return-to-reading-position.
+- Fingerprinted document identity, explicit source/Reader shared reading sessions, and trustworthy exact-quote/page-only/failure navigation.
+- Selection Ask creates a draft; Translate explicitly sends bounded context to the configured provider in the existing Side Panel. Draft conflict controls prevent silent replacement.
+- Preserve source tabs and native PDF default; transient raw local bytes and same-file recovery, no permanent library.
+- Fix image Markdown fallback so disabled remote images do not become tracking links.
+- No release/merge/Actions execution. Real desktop Chrome/site/provider/human usability acceptance remains separate from deterministic tests.

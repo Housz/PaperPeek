@@ -85,3 +85,11 @@ Run `tests/tab-workspace.test.ts` and `tests/reader-flows.test.ts` after modifyi
 
 - Issue #7: Render AI explanations and Paper Card preview via the bundled safe Markdown parser, **not** raw model HTML. Keep untrusted HTML disabled, restrict links, disable network image loading; preserve PDF citation behavior and original `.md` copy/download. Maintain `tests/markdown-view.test.ts` and `tests/reader-flows.test.ts`.
 - Issue #11: Use original PNGs from asset branch, wired into Chrome Manifest. Never replace supplied artwork with generated substitutes. `tests/icons.test.ts` checks all four sizes; GitHub Release ZIP verifies all icon paths.
+
+## Issue #14 development branch (supersedes frozen viewer scope above)
+
+The owner authorized implementing Reading Loop on a new branch only. Do not merge main, create tags, dispatch Actions, or publish a release. Validate locally; Actions is unavailable. No default PDF interception.
+
+Read `docs/reading-loop.md` and ADR `docs/decisions/0002-reading-loop.md`. `reader.html` / `src/reader.ts` implement an opt-in full-tab PDF.js Reader; the existing Side Panel remains the sole AI surface. `anchors.ts` owns document fingerprints and A/B/C navigation. `reading-loop.ts` owns explicit reading sessions: a source and its Reader share one synthetic workspace owner, whereas independently opened same-URL sources remain separate. A document fingerprint is not a session ID.
+
+Explicit Translate now also authorizes an AI request. Selection, Ask-draft creation, search, scroll and navigation must never invoke AI. Source/Reader state is temporary, PDF bytes never enter storage. New selection must not silently discard an edited draft. Unverified model page hints must not receive exact quote highlights. Do not claim real Chrome or human-study acceptance from DOM tests; record execution limits precisely.

@@ -70,3 +70,9 @@ Manual desktop Chrome verification is still required:
 8. Observe clear behavior on browser restart and extension reload; do not promise persistence across either.
 
 These checks are especially important because a DOM simulator cannot establish real Chrome Side Panel/service-worker lifecycle behavior.
+
+## Reading Loop branch migration
+
+For ordinary tabs the existing v1 workspace remains valid. Opening a Reader copies its checkpoint to a new positive synthetic workspace ID. A random readingSessionId associates sourceTabId and readerTabId with that owner; documentId is the PDF byte hash, not URL or tab. The original webpage is retained. Repeated evidence clicks reuse that session's Reader. Independent same-URL tabs remain independent.
+
+Closing only the source or Reader keeps the shared workspace while its companion remains. Navigating a source to another paper detaches it from the old Reader. Last-tab closure clears synthetic workspace, pending selection/anchor and reading position. Browser/extension restart clears storage.session. Raw local file bytes cannot be restored from storage; Reader reselect verifies the expected hash.

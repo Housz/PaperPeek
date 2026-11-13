@@ -78,3 +78,7 @@ Recommended prompt evaluation set (with permissions to share each paper):
 ## Prompt maintenance
 
 Do not patch random string literals in UI. Edit `PROMPT_PRESETS` and shared `FOUNDATION` in `src/lib/prompts.ts`. Bump `PROMPT_LIBRARY_VERSION` when behavior materially changes. Update test fixtures and release notes in same PR. No raw prompt or PDF document logging in public CI.
+
+## Selection translation (Reading Loop branch)
+
+`src/lib/translation.ts` adds a distinct bounded translation prompt without changing existing overview/Q&A wording. It sends the selected passage (max 6,000 characters), nearby text (bounded to 9,000) and title, never a local path or entire paper by default. It prioritizes faithful Chinese translation preserving quantities, symbols, conditions and uncertainty; missing extraction is disclosed rather than reconstructed. Trigger is an explicit Translate click. Real model fidelity is not certified by structural tests.

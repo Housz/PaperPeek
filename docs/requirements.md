@@ -79,3 +79,8 @@ Time to initial paper decision; answer correctness audited against PDF; ratio of
 - Paper Card defaults to rendered preview and offers a raw-source toggle. Copy/download still exports the original deterministic `.md` with no HTML transformation.
 - Chrome toolbar/action and extension icons come from the approved Issue #11 transparent PNG files at 16, 32, 48 and 128 px. No substitute logo or unnecessary decorative UI.
 - CI/Release must verify the Manifest icon mappings and existence of all four PNG files in the ZIP before publication.
+
+
+## Issue #14 branch extension
+
+The owner subsequently authorized Reading Loop implementation: optional full-tab Reader, verified source navigation and return, explicit selection Ask/Translate in the existing Side Panel. This supersedes the original no-viewer boundary only for this development branch. No default MIME interception, persistent archive, OCR, backend, or release. See the issue and `reading-loop.md` for acceptance, including pending actual browser and human observations.

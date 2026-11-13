@@ -13,7 +13,10 @@ const renderer = new MarkdownIt({
   breaks: true,
   typographer: false
 });
-renderer.disable("image");
+// Keep image parsing so its nested link cannot become a clickable tracking URL.
+// Render only escaped alternative text; never create an image or network request.
+renderer.renderer.rules.image = (tokens, index) =>
+  renderer.utils.escapeHtml(tokens[index].content);
 renderer.validateLink = (href: string) => /^https?:\/\//i.test(href);
 renderer.renderer.rules.link_open = (tokens, index, options, env, self) => {
   const link = tokens[index];

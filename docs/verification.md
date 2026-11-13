@@ -1,3 +1,11 @@
+# Reading Loop branch verification — 2026-11-13
+
+Local TypeScript, Vitest (101/101 across 18 files), and Vite production build passed for the Issue #14 implementation checkpoint. No GitHub Actions run or release was requested. New tests cover anchors/session lifecycle, actual Side Panel DOM with mocked Chrome/provider, Reader DOM with mocked PDF.js/Chrome, and bounded translation prompts. See [full matrix and limitations](reading-loop.md).
+
+Installed Chromium startup was attempted but blocked by this executor's Unix socket permissions; existing managed-browser policy does not allow extension installation UI. Real extension, publisher/provider, quantitative navigation and 3–5-person usability acceptance therefore remain **not verified**. Do not equate mocked tests with end-to-end acceptance.
+
+---
+
 # Verification report — PaperPeek (through v0.1.4)
 
 **Date:** 2026-11-02  
