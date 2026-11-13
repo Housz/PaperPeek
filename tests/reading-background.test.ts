@@ -88,4 +88,87 @@ describe('reading-loop service-worker boundaries',()=>{
     expect((await send({type:'reader-selection',sessionId:session.sessionId,documentId:'doc',action:'ask',selection,position:{...position,scale:NaN}},sender)).error).toBeTruthy();
   });
 
+  it('opens in the source tab and preserves state through back/forward URLs', async()=>{
+    const s=await send({type:'open-reader',workspaceTabId:1,sourceTabId:1,documentId:'doc',mode:'current-tab'});
+    expect(s.readerTabId).toBe(1);expect(s.sourceTabId).toBe(1);expect(s.openMode).toBe('current-tab');
+    expect(tabs.size).toBe(1);
+    updated(1,{url:tabs.get(1).url});await settle();
+    expect((await sessionForTab(1))?.sessionId).toBe(s.sessionId);
+    updated(1,{url:'https://x/article'});await settle();
+    expect((await sessionForTab(1))?.sessionId).toBe(s.sessionId);
+    updated(1,{url:base+'reader.html?session='+s.sessionId});await settle();
+    expect(entries[workspaceKey(s.workspaceTabId)]).toBeTruthy();
+    removed(1);await settle();expect(await getReadingSession(s.sessionId)).toBeNull();
+  });
+  it('same-tab navigation to another document clears only the old session', async()=>{
+    const s=await send({type:'open-reader',workspaceTabId:1,sourceTabId:1,documentId:'doc',mode:'current-tab'});
+    updated(1,{url:'https://x/other.pdf'});await settle();
+    expect(await getReadingSession(s.sessionId)).toBeNull();
+    expect(entries[workspaceKey(s.workspaceTabId)]).toBeUndefined();
+  });
+  it('returns a same-tab Reader to its original source without losing the workspace', async()=>{
+    const s=await send({type:'open-reader',workspaceTabId:1,sourceTabId:1,documentId:'doc',mode:'current-tab'});
+    const sender={id:'test',url:tabs.get(1).url,tab:{id:1}};
+    expect(await send({type:'reader-source',sessionId:s.sessionId,documentId:'doc'},sender)).toEqual({ok:true});
+    expect(tabs.get(1).url).toBe('https://x/article');
+    updated(1,{url:tabs.get(1).url});await settle();
+    expect((await sessionForTab(1))?.workspaceTabId).toBe(s.workspaceTabId);
+  });
+  it('reattaches a source reopened after its original tab closes', async()=>{
+    const s=await open();removed(1);tabs.delete(1);await settle();
+    const sender={id:'test',url:tabs.get(s.readerTabId).url,tab:{id:s.readerTabId}};
+    expect(await send({type:'reader-source',sessionId:s.sessionId,documentId:'doc'},sender)).toEqual({ok:true});
+    const restored=await getReadingSession(s.sessionId);
+    expect(restored?.sourceTabId).toBe(11);expect((await sessionForTab(11))?.workspaceTabId).toBe(s.workspaceTabId);
+  });
+  it('accepts cite without calling an AI provider and retains its origin', async()=>{
+    const s=await open();const sender={id:'test',url:tabs.get(s.readerTabId).url,tab:{id:s.readerTabId}};
+    const selection={sessionId:s.sessionId,documentId:'doc',text:'Evidence',pageStart:2,pageEnd:2,at:Date.now(),anchor:{sessionId:s.sessionId,documentId:'doc',pageNumber:2,verification:'quote-verified'}};
+    expect(await send({type:'reader-selection',sessionId:s.sessionId,documentId:'doc',action:'cite',selection},sender)).toEqual({ok:true});
+    expect(entries[selectionKey(s.sessionId)].action).toBe('cite');
+    expect(entries[selectionKey(s.sessionId)].selection).toMatchObject(selection);
+    expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+  });
+  it('rejects invalid opening modes without changing tabs', async()=>{
+    expect((await send({type:'open-reader',workspaceTabId:1,sourceTabId:1,documentId:'doc',mode:'replace-all'})).error).toBeTruthy();
+    expect(tabs.size).toBe(1);expect(tabs.get(1).url).toBe('https://x/article');
+  });
+  it('rolls back current-tab registration if navigation fails', async()=>{
+    const originalUpdate=chrome.tabs.update;
+    chrome.tabs.update=vi.fn(async()=>{throw Error('navigation failed');}) as any;
+    const result=await send({type:'open-reader',workspaceTabId:1,sourceTabId:1,documentId:'doc',mode:'current-tab'});
+    expect(result.error).toBe('navigation failed');
+    const s=await sessionForTab(1);expect(s?.sourceTabId).toBe(1);expect(s?.readerTabId).toBeUndefined();
+    expect(entries[workspaceKey(s!.workspaceTabId)]).toBeTruthy();chrome.tabs.update=originalUpdate;
+  });
+
+  it('registers current-tab sessions before early Reader ready and navigation events', async()=>{
+    let ready:Promise<any>|undefined;
+    const update=chrome.tabs.update;
+    chrome.tabs.update=(async(id:number,props:any)=>{
+      const tab=await (update as any)(id,props);
+      if(props.url){
+        updated(id,{url:props.url});
+        ready=send({type:'reader-ready',sessionId:new URL(props.url).searchParams.get('session')},{id:'test',url:props.url,tab:{id}});
+      }
+      return tab;
+    }) as any;
+    const s=await send({type:'open-reader',workspaceTabId:1,sourceTabId:1,documentId:'doc',mode:'current-tab'});
+    expect((await ready)?.documentId).toBe('doc');
+    expect((await sessionForTab(1))?.sessionId).toBe(s.sessionId);
+  });
+
+  it('never overwrites an unconsumed cite when the sidepanel is busy', async()=>{
+    const s=await open();const sender={id:'test',url:tabs.get(s.readerTabId).url,tab:{id:s.readerTabId}};
+    const selection={sessionId:s.sessionId,documentId:'doc',text:'First quote',pageStart:1,pageEnd:1,at:Date.now(),anchor:{sessionId:s.sessionId,documentId:'doc',pageNumber:1,verification:'quote-verified'}};
+    expect(await send({type:'reader-selection',sessionId:s.sessionId,documentId:'doc',action:'cite',selection},sender)).toEqual({ok:true});
+    const first=structuredClone(entries[selectionKey(s.sessionId)]);
+    const second=await send({type:'reader-selection',sessionId:s.sessionId,documentId:'doc',action:'cite',selection:{...selection,text:'Second quote'}},sender);
+    expect(second.error).toContain('尚未加入');
+    expect(entries[selectionKey(s.sessionId)]).toEqual(first);
+    await send({type:'reader-consume',sessionId:s.sessionId,requestId:first.requestId});
+    expect(await send({type:'reader-selection',sessionId:s.sessionId,documentId:'doc',action:'cite',selection:{...selection,text:'Second quote'}},sender)).toEqual({ok:true});
+    expect(entries[selectionKey(s.sessionId)].selection.text).toBe('Second quote');
+  });
+
 });

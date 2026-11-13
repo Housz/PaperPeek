@@ -140,3 +140,11 @@ The automated test counts above do **not** certify those browser/provider workfl
 - Real Chrome and actual provider smoke also remain pending; CI could not validate this version. The new source-level regression tests are committed but **have not executed successfully in Actions**.
 
 Maintainers: this blocked release is a delivery/environment issue; don't fabricate green checks or upload unverified artifacts by renaming old v0.1.4 binaries.
+
+## Issue #15 development verification (2026-11-13)
+
+- Changes implement local popup Ask/Translate, persistent local discussions, multiple main-chat citation cards, left navigation, same-tab/new-tab Reader opening and compact provider/model header.
+- Real Chromium launch was retried using installed `/usr/bin/chromium` and Playwright. Startup failed before any page/extension check at `socket() failed: Operation not permitted` (including the allowed elevated path). No alternative connected computer was available. **Real Chrome MV3/native Side Panel acceptance remains unexecuted**, not passed.
+- `scripts/browser-smoke.mjs` is updated for the new interactions and current-tab Back/Forward flow. It uses the actual built extension but synthetic network and an inactive extension tab hosting production Side Panel UI; it is not a substitute for native Side Panel, live API, publisher or human usability acceptance.
+- No live API key was used in automated tests; all provider responses are mocks. No GitHub Actions, release/tag or main merge were run.
+- Final integrated checks: TypeScript passed; all **142 tests across 20 files passed twice consecutively**; Vite production build passed; `git diff --check` and browser-harness syntax passed. Vite retains a >500 kB shared-chunk size warning. These are automated/mock results, not browser or live-provider acceptance.

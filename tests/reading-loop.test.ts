@@ -55,4 +55,12 @@ describe("reading sessions", () => {
     expect(validateSelection({ ...selection, text: "x".repeat(6001) }, s, 3)).toBeTruthy();
     expect(validateSelection({ ...selection, pageEnd: 4 }, s, 3)).toBeTruthy();
   });
+  it("replacing a same-tab document removes the previous identity", async () => {
+    const a = await ensureReadingSession(1, "old", "https://x/p.pdf", "https://x/p.pdf");
+    await attachReader(a.sessionId, 1, "current-tab");
+    const b = await ensureReadingSession(1, "new", "https://x/p.pdf", "https://x/p.pdf");
+    expect(await getReadingSession(a.sessionId)).toBeNull();
+    expect((await sessionForTab(1))?.sessionId).toBe(b.sessionId);
+  });
+
 });

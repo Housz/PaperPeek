@@ -12,10 +12,7 @@
     <header class="topbar" aria-label="当前论文与操作">
       <div class="header-identity">
         <div class="header-brand">
-          <span class="brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h4"/></svg>
-          </span>
-          <span class="brand-name">PaperPeek</span>
+          <span id="providerMark" class="provider-mark">AI</span>
           <span id="modelStatus" class="model-status" aria-label="当前 AI 模型" title="当前 AI 模型"></span>
           <span id="paperState" class="paper-state" hidden></span>
         </div>
@@ -40,7 +37,12 @@
     <main class="workspace">
       <div id="status" class="status" role="status" aria-live="polite" hidden></div>
 
-      <button id="openReaderBtn" type="button" class="button button-secondary reader-entry">在 PaperPeek 中阅读</button>
+      <div class="reader-entry-row">
+        <button id="openReaderBtn" type="button" class="button button-secondary reader-entry">在 PaperPeek 中阅读</button>
+        <details class="reader-open-options"><summary aria-label="选择阅读器打开方式" title="选择打开方式">▾</summary><div>
+          <button id="openReaderHere" type="button" class="button button-secondary">在当前标签打开</button>
+          <button id="openReaderNew" type="button" class="button button-secondary">在新标签打开</button>
+        </div></details></div>
 
       <nav id="primaryTabs" class="tabbar" role="tablist" aria-label="阅读内容">
         <button id="tab-overview" role="tab" aria-controls="view-overview" class="tab active" data-tab="overview" type="button" aria-selected="true">概览</button>
@@ -151,6 +153,15 @@
             <button id="testBtn" type="button" class="button button-secondary">测试模型</button>
             <button id="clearKeyBtn" type="button" class="button button-ghost">清除 Key</button>
           </div>
+        </form>
+        <form id="readerSettingsForm" class="settings-form reader-settings">
+          <h3>阅读设置</h3>
+          <label for="readerTrigger">划词菜单触发方式</label>
+          <select id="readerTrigger"><option value="direct">选中文字后显示</option><option value="alt">完成选区时按住 Alt</option><option value="ctrl">完成选区时按住 Ctrl</option></select>
+          <p class="field-note">仅显示工具条，不自动调用 AI。Alt / Ctrl 可能与系统快捷键冲突。</p>
+          <label for="readerOpenMode">PaperPeek 阅读器打开方式</label>
+          <select id="readerOpenMode"><option value="new-tab">新标签页（保留来源）</option><option value="current-tab">当前标签页</option></select>
+          <button type="submit" class="button button-secondary">保存阅读设置</button>
         </form>
         <details class="privacy-details">
           <summary>隐私与数据处理</summary>

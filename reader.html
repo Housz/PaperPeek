@@ -2,6 +2,7 @@
 <html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PaperPeek 阅读器</title></head>
 <body>
 <header class="toolbar" aria-label="PDF 阅读工具">
+  <button id="outlineToggle" title="打开或收起导航" aria-label="打开或收起目录" aria-controls="navigation" aria-expanded="false">☰ <span>目录</span></button>
   <strong class="brand">PaperPeek</strong>
   <button id="previous" title="上一页" aria-label="上一页">‹</button>
   <label class="page-control"><span class="sr-only">PDF 物理页码</span><input id="pageNumber" type="number" min="1" value="1" aria-label="PDF 物理页码"> / <span id="pageCount">–</span></label>
@@ -10,14 +11,27 @@
   <button id="findToggle" aria-label="搜索 PDF" aria-expanded="false">搜索</button>
   <button id="returnPosition" disabled>返回阅读处</button>
   <details class="more"><summary aria-label="更多阅读操作">更多</summary><div>
-    <button id="rotate">旋转 90°</button><button id="outlineToggle">目录</button><button id="source">打开原来源</button><button id="chooseFile">重新选择 PDF</button>
+    <button id="rotate">旋转 90°</button><button id="source">打开原来源</button><button id="chooseFile">重新选择 PDF</button>
   </div></details>
 </header>
 <section id="findBar" hidden aria-label="搜索"><label for="findText">查找</label><input id="findText" type="search" maxlength="300" placeholder="搜索原文"><button id="findPrevious" aria-label="上一个匹配">↑</button><button id="findNext" aria-label="下一个匹配">↓</button><span id="findCount" aria-live="polite"></span><button id="findClose" aria-label="关闭搜索">×</button></section>
 <div id="status" role="status" aria-live="polite">正在打开 PDF…</div>
-<aside id="outline" hidden aria-label="PDF 目录"></aside>
+<aside id="navigation" hidden aria-label="文档导航">
+  <div class="navigation-tabs" role="tablist" aria-label="导航内容"><button id="outlineTab" role="tab" aria-selected="true" aria-controls="outline">目录</button><button id="discussionsTab" role="tab" aria-selected="false" aria-controls="discussions">讨论 <span id="discussionCount">0</span></button><button id="navClose" aria-label="收起导航">×</button></div>
+  <section id="outline" role="tabpanel" aria-label="PDF 目录"></section>
+  <section id="discussions" hidden role="tabpanel" aria-label="局部讨论"><p class="privacy-note">问题与翻译仅保存在本机浏览器，不会跨设备同步。</p><button id="clearDiscussions">清除此文档的讨论</button><div id="discussionList"></div></section>
+  <div id="navResize" role="separator" aria-label="调整导航宽度" aria-orientation="vertical" tabindex="0"></div>
+</aside>
 <main id="pages" tabindex="0" aria-label="PDF 正文"></main>
-<div id="selectionActions" role="toolbar" aria-label="选段操作" hidden><button id="askSelection">问</button><button id="translateSelection">译</button></div>
+<div id="selectionActions" role="toolbar" aria-label="选段操作" hidden><button id="askSelection" title="询问这段" aria-label="询问这段">◌ <span>问</span></button><button id="translateSelection" title="翻译选文" aria-label="翻译选文">文 <span>译</span></button><button id="citeSelection" title="加入主对话引用，不自动发送" aria-label="加入主对话引用">❞ <span>引用</span></button></div>
+<section id="localPanel" hidden role="dialog" aria-modal="false" aria-labelledby="localTitle" tabindex="-1">
+  <header class="local-header"><strong id="localTitle">询问这段</strong><button id="localClose" aria-label="收起局部对话" title="收起，不删除对话">×</button></header>
+  <details class="local-source"><summary id="localSourceLabel">原文</summary><blockquote id="localQuote"></blockquote></details>
+  <p class="privacy-note">发送仅包含选文与此局部对话，不含主对话或全文。提问后自动保存本机；翻译需点击保存。可随时删除，不跨设备同步。</p>
+  <div id="localMessages" aria-label="局部对话内容"></div>
+  <p id="localStatus" role="status" aria-live="polite"></p>
+  <form id="localForm"><label class="sr-only" for="localQuestion">关于选文的问题</label><textarea id="localQuestion" maxlength="3000" rows="2" placeholder="关于这段文字，你想问什么？"></textarea><div class="local-actions"><button id="localSend" type="submit">发送</button><button id="localStop" type="button" hidden>停止</button><button id="localRetry" type="button" hidden>重试</button><button id="localSave" type="button" hidden>保存讨论</button><button id="localCopy" type="button" title="复制最新回答">复制</button><button id="localCite" type="button" title="仅将原文加入主对话草稿">引用原文</button><button id="localDelete" type="button">删除讨论</button></div></form>
+</section>
 <input id="fileInput" type="file" accept="application/pdf,.pdf" hidden>
 <script type="module" src="/src/reader.ts"></script>
 </body></html>

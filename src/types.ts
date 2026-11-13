@@ -25,7 +25,7 @@ export interface Digest {
   limitations: string[];
   keywords: string[];
 }
-export interface ChatMessage { role: "user" | "assistant"; text: string }
+export interface ChatMessage { role: "user" | "assistant"; text: string; citations?: import("./lib/reading-loop").ReadingSelection[] }
 export interface Settings {
   provider: Provider;
   model: string;

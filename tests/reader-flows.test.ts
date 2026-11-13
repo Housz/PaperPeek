@@ -88,6 +88,11 @@ function setupFakeChrome(): void {
         events.removed.push(callback) }
     },
     storage: {
+      local: {
+        get: vi.fn(async (key: string) => ({ [key]: storage['local:' + key] })),
+        set: vi.fn(async (next: Record<string, unknown>) => { for (const [key, value] of Object.entries(next)) storage['local:' + key] = value; }),
+        remove: vi.fn(async (key: string) => { delete storage['local:' + key]; })
+      },
       session: {
         get: vi.fn(async (keys: string | string[] | null) => {
           if (keys === null) return { ...storage };
@@ -136,12 +141,12 @@ async function openLoop(): Promise<void> {
   await vi.waitFor(() => expect(storage['paperpeek.readingSession.v1.session-101']).toBeDefined());
   await new Promise(resolve => setTimeout(resolve, 30));
 }
-function selectionRequest(action: 'ask' | 'translate', id = 'selection-1'): void {
+function selectionRequest(action: 'ask' | 'translate' | 'cite', id = 'selection-1', text = 'Results improved accuracy on three datasets.'): void {
   const sessionId = 'session-101', documentId = 'sha256:paper-a';
   const request = { action, requestId: id, selection: { sessionId, documentId,
-    text: 'Results improved accuracy on three datasets.', pageStart: 2, pageEnd: 2, at: Date.now(),
+    text, pageStart: 2, pageEnd: 2, at: Date.now(),
     position: {pageNumber:2,scrollTop:435,scrollLeft:12,scale:1.8,rotation:90},
-    anchor: { sessionId, documentId, pageNumber: 2, exactQuote: 'Results improved accuracy on three datasets.', verification: 'quote-verified' } } };
+    anchor: { sessionId, documentId, pageNumber: 2, exactQuote: text, verification: 'quote-verified' } } };
   const key = 'paperpeek.readerSelection.' + sessionId; storage[key] = request;
   for (const callback of events.storage) callback({ [key]: { newValue: request } }, 'session');
 }
@@ -187,7 +192,7 @@ describe("reader journeys (actual Side Panel DOM with mocked Chrome/API)", () =>
     setTab(101, "https://arxiv.org/pdf/2601.00001#page=2");
     await vi.waitFor(() => expect(byId("paperTitle").textContent).toBe("Paper A"));
     expect(byId("overviewContent").hidden).toBe(false);
-    expect(byId<HTMLButtonElement>("askBtn").disabled).toBe(false);
+    await vi.waitFor(() => expect(byId<HTMLButtonElement>("askBtn").disabled).toBe(false));
     expect(document.querySelectorAll(".message.assistant")).toHaveLength(1);
     expect(byId<HTMLTextAreaElement>("askInput").value).toBe("Follow-up draft (not sent)");
     expect(byId("view-ask").hidden).toBe(false);
@@ -246,7 +251,7 @@ describe("reader journeys (actual Side Panel DOM with mocked Chrome/API)", () =>
     expect(activeTab.url).toBe('https://arxiv.org/pdf/2601.00001');
     expect(chrome.tabs.update).not.toHaveBeenCalled();
     expect(byId("overviewContent").hidden).toBe(false);
-    expect(byId<HTMLButtonElement>("askBtn").disabled).toBe(false);
+    await vi.waitFor(() => expect(byId<HTMLButtonElement>("askBtn").disabled).toBe(false));
     expect(byId<HTMLTextAreaElement>("cardText").value).toContain("Paper A");
 
     click("tab-ask");
@@ -256,7 +261,7 @@ describe("reader journeys (actual Side Panel DOM with mocked Chrome/API)", () =>
     click("settingsBack");
     expect(byId("view-ask").hidden).toBe(false);
     expect(byId<HTMLTextAreaElement>("cardText").value).toContain("Paper A");
-    expect(byId("modelStatus").textContent).toBe("DeepSeek · deepseek-flash");
+    expect(byId("modelStatus").textContent).toBe("deepseek-flash");
     expect(byId("modelStatus").title).toContain("当前用于新请求的模型");
   });
 
@@ -291,7 +296,7 @@ describe("reader journeys (actual Side Panel DOM with mocked Chrome/API)", () =>
   it("shows the exact saved model ID in the shared top-header status", async () => {
     await mountSidePanel();
     await vi.waitFor(() =>
-      expect(byId("modelStatus").textContent).toBe("DeepSeek · deepseek-flash"));
+      expect(byId("modelStatus").textContent).toBe("deepseek-flash"));
     click("settingsToggle");
     const picker = byId<HTMLSelectElement>("modelSelect");
     picker.value = "__custom__";
@@ -301,7 +306,7 @@ describe("reader journeys (actual Side Panel DOM with mocked Chrome/API)", () =>
     byId<HTMLFormElement>("settingsForm").dispatchEvent(
       new Event("submit", { bubbles: true, cancelable: true }));
     await vi.waitFor(() =>
-      expect(byId("modelStatus").textContent).toBe("DeepSeek · deepseek-v4-pro"));
+      expect(byId("modelStatus").textContent).toBe("deepseek-v4-pro"));
     expect(byId("modelStatus").title).toContain("deepseek-v4-pro");
   });
 
@@ -362,10 +367,9 @@ describe("reader journeys (actual Side Panel DOM with mocked Chrome/API)", () =>
     expect(byId('selectionDraft').textContent).toContain('Results improved accuracy');
     byId<HTMLTextAreaElement>('askInput').value = 'Keep my edited question';
     selectionRequest('ask', 'selection-2');
-    await vi.waitFor(() => expect(byId('pendingSelection').hidden).toBe(false));
-    expect(byId<HTMLTextAreaElement>('askInput').value).toBe('Keep my edited question');
-    const keep = [...byId('pendingSelection').querySelectorAll('button')].find(b => b.textContent === '保留当前草稿')!;
-    keep.click();
+    await vi.waitFor(() => expect(storage['paperpeek.readerSelection.session-101']).toBeUndefined());
+    expect(byId('pendingSelection').hidden).toBe(true);
+    expect(byId('selectionDraft').querySelectorAll('.citation-card')).toHaveLength(1);
     expect(byId<HTMLTextAreaElement>('askInput').value).toBe('Keep my edited question');
     expect(mock.generate).toHaveBeenCalledTimes(calls);
   });
@@ -417,8 +421,102 @@ describe("reader journeys (actual Side Panel DOM with mocked Chrome/API)", () =>
   it('returns a selected passage to its captured reading position instead of a new page jump',async()=>{
     await openLoop();selectionRequest('ask');
     await vi.waitFor(()=>expect(byId('selectionDraft').hidden).toBe(false));
-    [...byId('selectionDraft').querySelectorAll('button')].find(b=>b.textContent==='返回原文')!.click();
+    [...byId('selectionDraft').querySelectorAll('button')].find(b=>b.textContent==='返回阅读位置')!.click();
     await vi.waitFor(()=>expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({type:'open-reader',position:{pageNumber:2,scrollTop:435,scrollLeft:12,scale:1.8,rotation:90},anchor:undefined})));
+  });
+
+  it('appends multiple citations without sending, retains them in sent messages and after panel reopen', async () => {
+    await openLoop(); const calls = mock.generate.mock.calls.length;
+    byId<HTMLTextAreaElement>('askInput').value = 'Compare the two passages';
+    selectionRequest('cite');
+    await vi.waitFor(() => expect(byId('selectionDraft').querySelectorAll('.citation-card')).toHaveLength(1));
+    selectionRequest('cite', 'selection-2', 'A scientific approach with experiments.');
+    await vi.waitFor(() => expect(byId('selectionDraft').querySelectorAll('.citation-card')).toHaveLength(2));
+    expect(byId<HTMLTextAreaElement>('askInput').value).toBe('Compare the two passages');
+    expect(mock.generate).toHaveBeenCalledTimes(calls);
+    byId<HTMLFormElement>('askForm').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(document.querySelector('.message.assistant')).not.toBeNull());
+    expect(document.querySelectorAll('.message.user .citation-card')).toHaveLength(2);
+    expect(byId('selectionDraft').hidden).toBe(true);
+    const prompt = mock.generate.mock.calls.at(-1)?.[0].prompt;
+    expect(prompt).toContain('Results improved accuracy');
+    expect(prompt).toContain('A scientific approach');
+    await mountSidePanel();
+    await vi.waitFor(() => expect(document.querySelectorAll('.message.user .citation-card')).toHaveLength(2));
+    [...document.querySelectorAll<HTMLButtonElement>('.message.user .citation-card button')].find(b => b.textContent === '返回原文')!.click();
+    await vi.waitFor(() => expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'open-reader', anchor: expect.objectContaining({ exactQuote: 'Results improved accuracy on three datasets.', pageNumber: 2 })
+    })));
+  });
+
+  it('keeps question and source cards available after a failed model request', async () => {
+    await openLoop(); selectionRequest('cite');
+    await vi.waitFor(() => expect(byId('selectionDraft').hidden).toBe(false));
+    mock.generate.mockRejectedValueOnce(new Error('Temporary network failure'));
+    byId<HTMLTextAreaElement>('askInput').value = 'Please explain';
+    byId<HTMLFormElement>('askForm').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(byId('status').textContent).toContain('Temporary network failure'));
+    expect(byId<HTMLTextAreaElement>('askInput').value).toBe('Please explain');
+    expect(byId('selectionDraft').querySelectorAll('.citation-card')).toHaveLength(1);
+  });
+
+  it('lets the user explicitly choose current-tab Reader without an AI request', async () => {
+    await openLoop(); const calls = mock.generate.mock.calls.length;
+    click('openReaderHere');
+    await vi.waitFor(() => expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({type: 'open-reader', mode: 'current-tab'})));
+    expect(mock.generate).toHaveBeenCalledTimes(calls);
+  });
+
+  it('persists Reader preferences separately from provider credentials and uses the saved opening mode', async () => {
+    await openLoop();
+    byId<HTMLSelectElement>('readerTrigger').value = 'alt';
+    byId<HTMLSelectElement>('readerOpenMode').value = 'current-tab';
+    byId<HTMLFormElement>('readerSettingsForm').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(byId('status').textContent).toBe('阅读设置已保存。'));
+    expect(storage['local:paperpeek.readerSettings.v1']).toMatchObject({trigger: 'alt', openMode: 'current-tab'});
+    await mountSidePanel();
+    await vi.waitFor(() => expect(byId<HTMLSelectElement>('readerTrigger').value).toBe('alt'));
+    await vi.waitFor(() => expect(byId('paperTitle').textContent).toBe('Paper A'));
+    click('openReaderBtn');
+    await vi.waitFor(() => expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({type: 'open-reader', mode: 'current-tab'})));
+  });
+
+  it('retains a consumed citation in its origin when the tab changes during acknowledgement', async () => {
+    await openLoop();
+    const original = vi.mocked(chrome.runtime.sendMessage).getMockImplementation() as unknown as (message: unknown) => Promise<unknown>;
+    let finish!: () => void;
+    vi.mocked(chrome.runtime.sendMessage).mockImplementation(((message: {type?: string}) => {
+      if (message.type === 'reader-consume') return new Promise<unknown>(resolve => { finish = () => resolve({consumed: true}); });
+      return original(message);
+    }) as typeof chrome.runtime.sendMessage);
+    selectionRequest('cite');
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    setTab(102, 'https://arxiv.org/pdf/2601.00002');
+    await vi.waitFor(() => expect(byId('paperTitle').textContent).toContain('2601.00002'));
+    delete storage['paperpeek.readerSelection.session-101'];
+    finish();
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(byId('selectionDraft').hidden).toBe(true);
+    setTab(101, 'https://arxiv.org/pdf/2601.00001');
+    await vi.waitFor(() => expect(byId('selectionDraft').querySelectorAll('.citation-card')).toHaveLength(1));
+  });
+
+  it('restores failed question and references to the origin after switching to another paper', async () => {
+    await openLoop(); selectionRequest('cite');
+    await vi.waitFor(() => expect(byId('selectionDraft').hidden).toBe(false));
+    let reject!: (reason: Error) => void;
+    mock.generate.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }));
+    byId<HTMLTextAreaElement>('askInput').value = 'Original question';
+    byId<HTMLFormElement>('askForm').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(reject).toBeTypeOf('function'));
+    setTab(102, 'https://arxiv.org/pdf/2601.00002');
+    await vi.waitFor(() => expect(byId('paperTitle').textContent).toContain('2601.00002'));
+    reject(new Error('offline'));
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(byId<HTMLTextAreaElement>('askInput').value).toBe('');
+    setTab(101, 'https://arxiv.org/pdf/2601.00001');
+    await vi.waitFor(() => expect(byId<HTMLTextAreaElement>('askInput').value).toBe('Original question'));
+    expect(byId('selectionDraft').querySelectorAll('.citation-card')).toHaveLength(1);
   });
 
 });

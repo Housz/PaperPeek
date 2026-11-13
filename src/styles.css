@@ -274,3 +274,18 @@ textarea::placeholder, input::placeholder { color: var(--faint); }
 .selection-draft { padding: 8px; margin: 8px 0; border-left: 3px solid var(--accent, #6d78c9); font-size: 12px; overflow-wrap: anywhere; }
 .selection-draft blockquote { margin: 4px 0; max-height: 90px; overflow: auto; white-space: pre-wrap; }
 .selection-draft button { margin: 4px 8px 0 0; }
+
+/* Issue #15: model-first identity and source-linked quote cards. */
+.provider-mark { display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 6px; background: white; color: #242424; font-size: 11px; font-weight: 700; }
+.provider-mark img { width: 22px; height: 22px; object-fit: contain; }
+.model-status { max-width: 100%; font-size: 13px; font-weight: 600; }
+.reader-entry-row { display: flex; gap: 4px; margin-bottom: 10px; }
+.reader-entry-row .reader-entry { flex: 1; margin: 0; }
+.reader-open-options { position: relative; }
+.reader-open-options summary { padding: 8px 10px; cursor: pointer; border: 1px solid var(--border); border-radius: 7px; list-style: none; }
+.reader-open-options > div { position: absolute; right: 0; top: 100%; z-index: 12; min-width: 170px; padding: 6px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); display: grid; gap: 5px; }
+.reader-settings { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
+.citation-card { margin: 7px 0; padding: 8px; border: 1px solid var(--border); border-radius: 7px; font-size: 12px; overflow-wrap: anywhere; }
+.citation-card blockquote { margin: 5px 0; max-height: 100px; overflow: auto; white-space: pre-wrap; }
+.citation-title { font-weight: 600; }
+.citation-card button { margin: 3px 6px 0 0; }

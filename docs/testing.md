@@ -112,3 +112,15 @@ Also test 300/360/450px Side Panel widths, restricted file permission and offlin
 | ICON02 | Build/release asset ZIP | All icon sizes included, Manifest references existing files |
 
 Review the approved Issue #11 artwork visually in a real Chrome profile; binary file/PNG header tests cannot certify rendering at every DPI. The UI DOM tests use simulated Chrome and model calls, not a real desktop browser.
+
+## Issue #15 acceptance checklist
+
+- Selection direct / Alt / Ctrl modes, keyboard selection / Alt+Q, copy without unintended menu/action, menu on viewport edges.
+- Ask opens without API request; Submit makes one local request with selected text and local history only. Main chat is unchanged.
+- Close during generation, Stop, Retry, persisted question reopen, explicit Save of transient translation, translation follow-up, and storage quota failure feedback.
+- Multiple citation cards retain existing draft text, duplicates/caps are explicit, sent cards survive panel reopen, failed API restores draft and cards, each card returns to its own source.
+- Delete during generation, delete from another tab, clear document, reopen same content, changed content identity; verify no resurrection or cross-document leak.
+- Current/new tab opening, initial ready race, failed navigation rollback, Back/Forward, return source after source close, same-tab final cleanup.
+- Left outline direct access, expand/collapse independent of navigation, current section only when known, no-outline fallback, discussion counts, resize/narrow drawer, both navigation and Chrome Side Panel open.
+- Provider mark and exact model ID update; title tooltip and accessible name; local assets only.
+- Real Chrome mouse selection across pages, zoom/rotation, overlapping marks, screen-reader/keyboard focus and browser native viewer compatibility remain necessary beyond DOM mocks.

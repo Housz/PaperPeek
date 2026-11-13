@@ -56,3 +56,11 @@ Client-only BYOK is not equivalent to a backend secret management solution. Pass
 - Reader messages are restricted to extension pages and the session's registered Reader tab. Source-page scripts cannot submit external messages.
 - PDF link annotations allow only HTTP(S) external links with no referrer and explicit clicks. Script/actions embedded in PDFs are not executed.
 - Session state includes selected quotes and reading positions but never API credentials. Closing the last source/Reader clears state; closing the Side Panel can interrupt in-flight model calls.
+
+## Issue #15 local reading discussions (supersedes transient-only discussion scope)
+
+- Reader local questions send only selected text and that local thread to the configured provider after explicit submission. Opening Ask, selecting text, showing menus, viewing annotations or adding citation cards does not call AI. Translate is explicitly user-triggered.
+- Saved local questions and explicitly saved translations persist in `chrome.storage.local`, not sync: selected excerpts, anchors, timestamps and local messages only. This is not encrypted storage. No raw PDF, source URL or credential is persisted in the annotation record. Main paper analysis/chat keeps its existing transient lifetime.
+- Deleting a local discussion removes its local saved record and marker, not copies explicitly sent to the main chat and not provider-side data. Document-wide deletion is scoped to that fingerprint.
+- Restored records require the same PDF content identity. Stale session identities are rebound only after that match; quote verification still controls highlighting.
+- No additional host permissions, default PDF interception, analytics or backend are introduced.

@@ -19,6 +19,7 @@ export interface TabWorkspace {
   digest: Digest | null;
   conversation: ChatMessage[];
   draft: string;
+  selections?: import("./reading-loop").ReadingSelection[];
   selection?: import("./reading-loop").ReadingSelection;
   view: ReadingView;
 }

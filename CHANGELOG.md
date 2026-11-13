@@ -100,3 +100,12 @@ All notable changes are recorded here. Versions follow semantic versioning for M
 - Preserve source tabs and native PDF default; transient raw local bytes and same-file recovery, no permanent library.
 - Fix image Markdown fallback so disabled remote images do not become tracking links.
 - No release/merge/Actions execution. Real desktop Chrome/site/provider/human usability acceptance remains separate from deterministic tests.
+
+## Unreleased — Issue #15 reading experience (development branch)
+
+- Local selection Ask/Translate popup, explicit persistent discussions and per-document deletion, distinct source and discussion highlights.
+- Three selection actions with direct/Alt/Ctrl preference; multi-citation main drafts and per-card return navigation.
+- Left Outline/Discussions navigation with hierarchical outline, resizing and narrow-screen drawer.
+- Explicit current-tab/new-tab Reader modes without default PDF interception; source/main-workspace continuity.
+- Compact provider mark + model-ID header, bundled mark assets and provenance.
+- Added lifecycle, persistence, citation and preference regressions; updated real-browser harness. No release or live-provider acceptance implied.

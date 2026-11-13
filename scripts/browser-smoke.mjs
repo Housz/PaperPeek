@@ -16,11 +16,11 @@ const sourceUrl = 'https://arxiv.org/abs/2601.00001';
 const quote = 'Unique evidence on physical page 2: temperature may rise by 2.5 K.';
 const digest = { tldr: 'Synthetic test summary', problem: 'Test trustworthy navigation', approach: ['Fixture only'], findings: [{text:'Synthetic evidence',page:2,quote}], limitations:['Synthetic only'], keywords:['test'] };
 const results = { browser:'', mode:process.env.HEADED?'headed':'headless', checks:[], limitations:[
-  'Actual extension worker and built pages, but sidepanel.html is an inactive extension tab, NOT native Chrome Side Panel UI.',
+  'Actual extension worker and built pages, but sidepanel.html is an inactive extension tab; native Side Panel is disabled to avoid a second competing consumer. NOT native Chrome Side Panel UI acceptance.',
   'Selection is DOM Range driven, not mouse-drag or touch accessibility verification.',
   'Network is intercepted synthetic HTML/PDF/provider responses; no live API, publisher compatibility, or human research.'
 ] };
-let context, stage='launch', aiRequests=0, releaseTranslation;
+let context, stage='launch', aiRequests=0, releaseTranslation, holdNextLocal=false;
 const verify = label => results.checks.push(label);
 try {
   context = await chromium.launchPersistentContext(profile, {
@@ -42,9 +42,9 @@ try {
       const prompt = route.request().postDataJSON().messages[0].content;
       let content;
       if (prompt.includes('"tldr"')) content=JSON.stringify(digest);
-      else if (prompt.includes('<selection-untrusted>')) {
-        await new Promise(resolve => {releaseTranslation=resolve;});
-        content='测试译文：温度可能升高 2.5 K。 [PDF p.2]';
+      else if (prompt.includes('Local discussion (not the main conversation)')) {
+        if (holdNextLocal) { holdNextLocal=false; await new Promise(resolve => {releaseTranslation=resolve;}); }
+        content=prompt.includes('仅输出译文') ? '测试译文：温度可能升高 2.5 K。' : 'Synthetic local answer: selected evidence only.';
       } else content='Synthetic answer [PDF p.2]';
       return route.fulfill({contentType:'application/json',body:JSON.stringify({choices:[{message:{content}}]})});
     }
@@ -53,6 +53,8 @@ try {
   const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
   const extensionId = new URL(worker.url()).host;
   await worker.evaluate(async () => {
+    // The harness drives one production panel page, not Chrome's native Side Panel container.
+    await chrome.sidePanel.setOptions({enabled:false});
     // Only dummy BYOK settings are seeded. No paper, workspace, session or anchor records.
     await chrome.storage.local.set({'paperpeek.profileSettings.v2':{selected:'deepseek',profiles:{deepseek:{model:'qa-mock',rememberKey:false}}}});
     await chrome.storage.session.set({'paperpeek.sessionKeys.v2':{deepseek:'dummy-never-sent-to-network'}});
@@ -116,37 +118,90 @@ try {
   await reader.waitForFunction(()=>document.querySelector('#status').textContent.includes('页面级定位'));
   assert.equal(await reader.locator('.highlight').count(),0,'Model hint falsely highlighted quote');
   verify('B model page hint stays page-only without highlight');
-  stage='selection Ask/Translate and isolation';
+  stage='local Ask, persistent annotation, citation and isolated translation';
   await reader.locator('#pageNumber').fill('2');await reader.locator('#pageNumber').press('Enter');
   await reader.locator('.pdf-page[data-page="2"] .textLayer span').first().waitFor();
   const selectQuote=()=>reader.evaluate(()=>{
     const span=[...document.querySelectorAll('.pdf-page[data-page="2"] .textLayer span')].find(el=>el.textContent.includes('Unique evidence'));
     const range=document.createRange();range.selectNodeContents(span);const s=getSelection();s.removeAllRanges();s.addRange(range);
-    document.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));
+    span.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));
   });
   const beforeAsk=aiRequests;await selectQuote();await reader.locator('#askSelection').click();
-  await panel.locator('#selectionDraft').waitFor({state:'visible'});assert.equal(aiRequests,beforeAsk,'Ask called AI before user submits');
-  await panel.locator('#askInput').fill('Keep this draft');await selectQuote();await reader.locator('#translateSelection').click();
-  await panel.locator('#pendingSelection').waitFor({state:'visible'});assert.equal(await panel.locator('#askInput').inputValue(),'Keep this draft','New selection erased draft');
-  await panel.locator('#pendingSelection button').filter({hasText:'使用新选区'}).evaluate(el=>el.click());
+  await reader.locator('#localPanel').waitFor({state:'visible'});
+  assert.equal(aiRequests,beforeAsk,'Opening local Ask called AI before submit');
+  assert.equal(await panel.locator('#selectionDraft').isVisible(),false,'Local Ask leaked into main draft');
+  await reader.locator('#localQuestion').fill('Why does the temperature rise?');
+  await reader.locator('#localForm').evaluate(el=>el.requestSubmit());
+  await reader.waitForFunction(()=>document.querySelector('#localMessages').textContent.includes('Synthetic local answer'));
+  assert.equal(aiRequests,beforeAsk+1,'Local Ask should send one explicit request');
+  assert.ok(!(await panel.locator('#chatHistory').innerText()).includes('Synthetic local answer'),'Local answer leaked into main history');
+  await reader.locator('#localClose').click();
+  await reader.locator('.pdf-page[data-page="2"] .discussion-marker').first().click();
+  await reader.locator('#localPanel').waitFor({state:'visible'});
+  assert.match(await reader.locator('#localMessages').innerText(),/Synthetic local answer/);
+  assert.equal(aiRequests,beforeAsk+1,'Reopening saved question called AI');
+  await reader.locator('#localClose').click();
+  const durable=await worker.evaluate(async()=>Object.entries(await chrome.storage.local.get(null)).filter(([key])=>key.startsWith('paperpeek.annotation.v1.')));
+  assert.equal(durable.length,1,'Question was not saved as local annotation');
+  verify('Local Ask needs explicit submit; answer isolated from main chat; saved marker reopens without AI');
+
+  await panel.locator('#askInput').fill('Keep this main draft');
+  await selectQuote();await reader.locator('#citeSelection').click();
+  await panel.locator('#selectionDraft .citation-card').first().waitFor({state:'visible'});
+  assert.equal(await panel.locator('#askInput').inputValue(),'Keep this main draft','Cite erased main draft');
+  assert.equal(aiRequests,beforeAsk+1,'Cite implicitly requested AI');
+  await panel.locator('#selectionDraft .citation-card button').filter({hasText:'返回原文'}).first().evaluate(el=>el.click());
+  await reader.locator('.pdf-page[data-page="2"] .highlight').first().waitFor();
+  verify('Cite stages anchored quote without sending or replacing main draft; quote returns to original');
+
+  await selectQuote();holdNextLocal=true;await reader.locator('#translateSelection').click();
   await waitUntil(()=>typeof releaseTranslation==='function','Translate never reached mocked provider');
-  assert.equal(aiRequests,beforeAsk+1,'Translate should call provider exactly once');
+  assert.equal(aiRequests,beforeAsk+2,'Translate should call provider exactly once');
+  await reader.locator('#localClose').click();
   const independent=await context.newPage();await independent.goto(sourceUrl);
   const independentId=await worker.evaluate(async ({url,except})=>(await chrome.tabs.query({})).find(t=>t.url===url&&t.id!==except).id,{url:sourceUrl,except:sourceId});
   await worker.evaluate(id=>chrome.tabs.update(id,{active:true}),independentId);
   await panel.waitForFunction(()=>document.querySelector('#overviewContent').hidden&&document.querySelector('#askInput').value==='');
   releaseTranslation();
-  await worker.evaluate(async sessionId=>{
-    const all=await chrome.storage.session.get(null);const s=Object.values(all).find(v=>v?.sessionId===sessionId&&v.readerTabId);await chrome.tabs.update(s.readerTabId,{active:true});
-  },sessionId);
-  await panel.waitForFunction(()=>document.querySelector('#chatHistory').textContent.includes('测试译文'));
-  assert.equal(aiRequests,beforeAsk+1,'Tab switching caused extra AI');
-  await worker.evaluate(id=>chrome.tabs.update(id,{active:true}),independentId);
-  await panel.waitForFunction(()=>document.querySelector('#overviewContent').hidden);
-  assert.ok(!(await panel.locator('#chatHistory').innerText()).includes('测试译文'),'Completed A translation leaked into independent same-URL session');
+  await reader.waitForFunction(()=>document.querySelector('#localMessages').textContent.includes('测试译文'));
+  assert.equal(await reader.locator('#localPanel').isVisible(),false,'Background result reopened closed popup');
+  assert.ok(!(await panel.locator('#chatHistory').innerText()).includes('测试译文'),'Local translation leaked into independent main session');
   await worker.evaluate(async sessionId=>{const all=await chrome.storage.session.get(null);const s=Object.values(all).find(v=>v?.sessionId===sessionId&&v.readerTabId);await chrome.tabs.update(s.readerTabId,{active:true});},sessionId);
-  await panel.waitForFunction(()=>document.querySelector('#chatHistory').textContent.includes('测试译文'));
-  verify('Ask stages source with zero AI; draft protected; explicit Translate once; independent same-URL tab isolated and delayed result retained in A');
+  await panel.waitForFunction(()=>document.querySelector('#askInput').value==='Keep this main draft');
+  assert.equal(aiRequests,beforeAsk+2,'Tab switching caused extra AI');
+  verify('Translate explicit and isolated; close does not reopen; independent same-URL main session stays isolated');
+
+  stage='left navigation and persistent discussion reload';
+  await reader.reload();await reader.locator('.pdf-page canvas').first().waitFor();
+  await reader.locator('#outlineToggle').click();await reader.locator('#navigation').waitFor({state:'visible'});
+  await reader.locator('#discussionsTab').click();await reader.locator('.discussion-entry').first().click();
+  await reader.locator('#localPanel').waitFor({state:'visible'});
+  assert.match(await reader.locator('#localMessages').innerText(),/Synthetic local answer/);
+  assert.equal(aiRequests,beforeAsk+2,'Reloading discussion called AI');
+  await reader.locator('#localClose').click();await reader.locator('#navClose').click();
+  verify('Direct left navigation lists persisted discussion and reopens it after Reader reload');
+  stage='current-tab open and browser history continuity';
+  await worker.evaluate(id=>chrome.tabs.update(id,{active:true}),independentId);
+  await panel.waitForFunction(()=>document.querySelector('#overviewContent').hidden&&document.querySelector('#askInput').value==='');
+  await pressPanel('analyzeBtn');await panel.locator('.digest-section .page-link').first().waitFor();
+  await pressPanel('tab-ask');await panel.locator('#askInput').fill('Current-tab continuity draft');
+  // This independent source has no Reader yet; current-tab must not activate the first source's Reader.
+  const tabsBefore=context.pages().length,requestsBefore=aiRequests;
+  await pressPanel('openReaderHere');await independent.waitForURL(/reader\.html\?session=/);
+  await independent.locator('.pdf-page canvas').first().waitFor();
+  assert.equal(context.pages().length,tabsBefore,'Current-tab opened another tab');
+  assert.equal(source.url(),sourceUrl,'Current-tab changed unrelated original source');
+  assert.notEqual(new URL(independent.url()).searchParams.get('session'),sessionId,'Independent source reused original Reader session');
+  await panel.waitForFunction(()=>document.querySelector('#askInput').value==='Current-tab continuity draft');
+  await independent.goBack();await independent.waitForURL(sourceUrl);
+  await panel.waitForFunction(()=>document.querySelector('#askInput').value==='Current-tab continuity draft');
+  await independent.goForward();await independent.waitForURL(/reader\.html\?session=/);
+  await independent.locator('.pdf-page canvas').first().waitFor();
+  await independent.locator('.more summary').click();await independent.locator('#source').click();
+  await independent.waitForURL(sourceUrl);
+  await panel.waitForFunction(()=>document.querySelector('#askInput').value==='Current-tab continuity draft');
+  assert.equal(aiRequests,requestsBefore,'Reader navigation/history invoked AI');
+  verify('Current-tab reuses source tab; independent session and draft survive Back/Forward and explicit return to source');
   for(const width of [300,360,450]) {await panel.setViewportSize({width,height:900});assert.ok(await panel.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),`Panel overflow at ${width}px`);}
   await reader.emulateMedia({colorScheme:'dark'});await reader.screenshot({path:resolve(output,'reader-dark.png')});await panel.screenshot({path:resolve(output,'panel-450.png')});
   verify('Panel 300/360/450px overflow assertions; dark/high-DPI screenshots');

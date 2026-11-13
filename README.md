@@ -110,3 +110,7 @@ See [Security](docs/security.md) for threat model and disclosure procedure.
 ## Contributing
 
 请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)、[AGENTS.md](AGENTS.md) 和 [技术架构](docs/architecture.md)。本仓库没有在本版本中声明开源许可证；提交外部贡献前应先确认许可策略。
+
+## Issue #15 development: reading interaction upgrade
+
+On the development branch, Reader selections now support local Ask/Translate and multi-source Cite to the main draft. Local discussions can be reopened from marked text or the directly accessible left navigation, and intentionally saved records remain in this browser profile. Main paper analysis/chat remains transient. Translate is transient unless saved or followed by a question. Settings provides direct/Alt/Ctrl menu activation and current/new-tab Reader opening; native PDF + Side Panel analysis remains available. See [interaction and privacy details](docs/reading-experience.md), [ADR](docs/decisions/0003-local-reading-discussions.md), and [verification](docs/verification.md). This is development work, not a new release.

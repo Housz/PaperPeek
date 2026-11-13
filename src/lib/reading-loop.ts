@@ -1,4 +1,4 @@
-import { workspaceKey } from "./tab-workspace";
+import { workspaceKey, workspaceMatchesTab, blankWorkspace } from "./tab-workspace";
 import { anchorKey, positionKey, selectionKey } from "./reader-bridge";
 import type { PdfAnchor } from "./anchors";
 export type { PdfAnchor } from "./anchors";
@@ -28,6 +28,7 @@ export interface ReadingSession {
   readerTabId?: number;
   sourceUrl: string | null;
   sourceTabUrl: string;
+  openMode?: "new-tab" | "current-tab";
 }
 export const MAX_SELECTION_CHARS = 6000;
 const PREFIX = "paperpeek.readingSession.v1.";
@@ -61,6 +62,18 @@ export async function sessionForWorkspace(workspaceTabId: number): Promise<Readi
 export async function sessionForTab(tabId: number): Promise<ReadingSession | null> {
   return (await sessions()).find(s => s.sourceTabId === tabId || s.readerTabId === tabId) || null;
 }
+/** A same-tab Reader and its original source are both valid views of one workspace. */
+export function sessionMatchesTab(session: ReadingSession, tabId: number, url: string): boolean {
+  if (session.readerTabId === tabId) {
+    try {
+      const parsed = new URL(url);
+      if (parsed.href.split(/[?#]/)[0] === chrome.runtime.getURL("reader.html") &&
+          parsed.searchParams.get("session") === session.sessionId) return true;
+    } catch { /* Not a Reader URL. */ }
+  }
+  return session.sourceTabId === tabId && workspaceMatchesTab(
+    { ...blankWorkspace(session.workspaceTabId, session.sourceTabUrl), selectedPdfUrl: session.sourceUrl }, url);
+}
 /** Call mutations from the service worker only, so simultaneous panel/reader requests serialize. */
 export function ensureReadingSession(workspaceTabId: number, documentId: string, sourceUrl: string | null, sourceTabUrl: string): Promise<ReadingSession> {
   return mutate(async () => {
@@ -69,6 +82,7 @@ export function ensureReadingSession(workspaceTabId: number, documentId: string,
     // A new paper in the source tab must not inherit an old Reader's conversation.
     for (const prior of await sessions()) {
       if (prior.sourceTabId !== workspaceTabId) continue;
+      if (prior.readerTabId === prior.sourceTabId) delete prior.readerTabId;
       delete prior.sourceTabId;
       if (prior.readerTabId === undefined) await deleteSession(prior);
       else await chrome.storage.session.set({ [readingSessionKey(prior.sessionId)]: prior });
@@ -81,11 +95,21 @@ export function ensureReadingSession(workspaceTabId: number, documentId: string,
     return session;
   });
 }
-export function attachReader(id: string, readerTabId: number): Promise<ReadingSession> {
+export function attachReader(id: string, readerTabId: number, openMode: "new-tab" | "current-tab" = "new-tab"): Promise<ReadingSession> {
   return mutate(async () => {
     const session = await getReadingSession(id);
     if (!session) throw new Error("阅读会话已失效，请从原页面重新打开阅读器。");
     session.readerTabId = readerTabId;
+    session.openMode = openMode;
+    await chrome.storage.session.set({ [readingSessionKey(id)]: session });
+    return session;
+  });
+}
+export function attachSource(id: string, sourceTabId: number): Promise<ReadingSession> {
+  return mutate(async () => {
+    const session = await getReadingSession(id);
+    if (!session) throw new Error("阅读会话已失效，请重新分析论文。");
+    session.sourceTabId = sourceTabId;
     await chrome.storage.session.set({ [readingSessionKey(id)]: session });
     return session;
   });

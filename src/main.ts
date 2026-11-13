@@ -1,5 +1,6 @@
-import { getReadingSession, sessionForTab, sessionForWorkspace, type ReadingSession, type ReadingSelection, type ReadingPosition } from "./lib/reading-loop";
+import { getReadingSession, sessionMatchesTab, sessionForTab, sessionForWorkspace, type ReadingSession, type ReadingSelection, type ReadingPosition } from "./lib/reading-loop";
 import { openReader, selectionKey, loopMessage, type SelectionRequest } from "./lib/reader-bridge";
+import { loadReaderSettings, saveReaderSettings, type ReaderSettings } from "./lib/reader-settings";
 import { translationPrompt } from "./lib/translation";
 import type { ChatMessage, Digest, Paper, Provider } from "./types";
 import { DEFAULT_MODELS } from "./types";
@@ -77,7 +78,8 @@ const clearKeyBtn = byId<HTMLButtonElement>("clearKeyBtn");
 const openReaderBtn = byId<HTMLButtonElement>("openReaderBtn");
 const selectionDraft = byId("selectionDraft");
 const pendingSelection = byId("pendingSelection");
-let draftSelection: ReadingSelection | undefined;
+let draftSelections: ReadingSelection[] = [];
+let readerSettings: ReaderSettings = { trigger: "direct", openMode: "new-tab", navOpen: false, navWidth: 260 };
 let activeReadingSession: ReadingSession | null = null;
 let visibleTabId: number | undefined;
 let handledSelection = '';
@@ -177,7 +179,8 @@ function currentWorkspaceSnapshot(): TabWorkspace | null {
     digest,
     conversation: conversation.map(message => ({ ...message })),
     draft: askInput.value,
-    selection: draftSelection,
+    selection: undefined,
+    selections: structuredClone(draftSelections),
     view: lastReadingView === "ask" || lastReadingView === "card"
       ? lastReadingView : "overview"
   };
@@ -209,7 +212,7 @@ function restoreWorkspace(state: TabWorkspace): void {
     digest = state.digest;
     conversation = state.conversation.map(item => ({ ...item }));
     askInput.value = state.draft;
-    draftSelection = state.selection;
+    draftSelections = paper ? paperCitations(state.selections || (state.selection ? [state.selection] : []), paper) : [];
     renderSelectionDraft();
     pendingSelection.hidden = true;
     cardText.value = paper && digest ? toMarkdown(paper, digest) : "";
@@ -322,7 +325,19 @@ function renderPaperState(): void {
     deepseek: "DeepSeek", openai: "OpenAI", gemini: "Gemini"
   };
   const label = providerNames[credentials.provider] + " · " + (credentials.model || "未选模型");
-  modelStatus.textContent = label;
+  modelStatus.textContent = credentials.model || "未选模型";
+  const providerMark = byId("providerMark");
+  providerMark.replaceChildren();
+  providerMark.dataset.provider = credentials.provider;
+  providerMark.title = providerNames[credentials.provider] || "AI";
+  if (['openai', 'deepseek', 'gemini'].includes(credentials.provider)) {
+    const logo = create('img');
+    logo.src = chrome.runtime.getURL(`provider-icons/${credentials.provider}.svg`);
+    logo.alt = providerNames[credentials.provider];
+    logo.width = 22; logo.height = 22;
+    logo.onerror = () => { providerMark.textContent = 'AI'; };
+    providerMark.append(logo);
+  } else providerMark.textContent = 'AI';
   modelStatus.title = "当前用于新请求的模型：" + label +
     (credentials.apiKey.trim() ? "" : "（尚未配置 API Key）");
   analyzeBtn.hidden = currentView === "settings" || !hasPaper;
@@ -338,6 +353,7 @@ function renderPaperState(): void {
 
 function resetPaper(): void {
   paper = null; digest = null; conversation = [];
+  draftSelections = []; renderSelectionDraft();
   cardSourceMode = false;
   cardText.value = "";
   askInput.value = "";
@@ -412,6 +428,9 @@ function renderChat(): void {
       body.textContent = message.text;
     }
     bubble.append(body);
+    for (const citation of message.citations || []) {
+      bubble.append(citationCard(citation));
+    }
     chatHistory.append(bubble);
   }
   chatHistory.scrollTop = chatHistory.scrollHeight;
@@ -475,8 +494,7 @@ async function refreshActiveTab(thorough = false, rescan = false): Promise<void>
   if (generation !== scanGeneration) return;
   visibleTabId = tab?.id;
   let related = tab?.id !== undefined ? await sessionForTab(tab.id) : null;
-  if (related && related.sourceTabId === tab?.id && !workspaceMatchesTab(
-      { ...blankWorkspace(related.workspaceTabId, related.sourceTabUrl), selectedPdfUrl: related.sourceUrl }, tabIdentity(tab?.url))) {
+  if (related && tab?.id !== undefined && !sessionMatchesTab(related, tab.id, tab?.url || '')) {
     await loopMessage({ type: 'reader-detach', tabId: tab.id }); related = null;
   }
   if (generation !== scanGeneration) return;
@@ -648,12 +666,13 @@ async function acceptParsedPaper(
   target.conversation = [];
   target.draft = "";
   target.selection = undefined;
+  target.selections = [];
   target.view = "overview";
   const pendingSave = workspaces.save(target);
   if (activeTabId === tabId && (expectedSource === null || activePdfUrl === expectedSource)) {
     activePdfUrl = expectedSource;
     paper = loaded;
-    draftSelection = undefined; renderSelectionDraft();
+    draftSelections = []; renderSelectionDraft();
     digest = null;
     conversation = [];
     askInput.value = "";
@@ -736,19 +755,37 @@ async function openLocal(file: File): Promise<void> {
   if (loaded) await summarizePaper(tabId, loaded);
 }
 
+/** Stored references are scoped and bounded again before sending or restoring. */
+function paperCitations(items: ReadingSelection[] | undefined, target: Paper): ReadingSelection[] {
+  if (!Array.isArray(items)) return [];
+  let chars = 0;
+  return items.filter(item => {
+    if (!item || item.documentId !== target.documentId || item.anchor?.documentId !== target.documentId ||
+        typeof item.text !== 'string' || !item.text.trim() || item.text.length > 6000 ||
+        !Number.isSafeInteger(item.pageStart) || !Number.isSafeInteger(item.pageEnd) ||
+        item.pageStart < 1 || item.pageEnd < item.pageStart || item.pageEnd > target.totalPages) return false;
+    chars += item.text.length;
+    return chars <= 24000;
+  }).slice(0, 8);
+}
+
 async function ask(question: string): Promise<void> {
   if (!paper || busy || activeTabId === undefined) {
     showStatus("请先分析或加载当前论文。", true);
     return;
   }
+  if (!credentials.apiKey.trim()) { setView('settings'); showStatus('请先配置当前服务商的 API Key。'); return; }
   const tabId = activeTabId;
   const targetPaper = paper;
-  const history = conversation.slice(-6);
-  const selected = draftSelection?.documentId === targetPaper.documentId ? draftSelection : undefined;
-  const prompt = askPrompt(targetPaper, question, history) + (selected
-    ? `\n<selected-passage-untrusted page="${selected.pageStart}">\n${selected.text.slice(0,6000)}\n</selected-passage-untrusted>` : '');
-  if (selected) question = `选区 [PDF p.${selected.pageStart}]：\n${selected.text}\n\n问题：${question}`;
-  conversation.push({ role: "user", text: question });
+  askInput.value = '';
+  const history = conversation.slice(-6).map(message => ({ ...message,
+    text: message.text + paperCitations(message.citations, targetPaper).map(c => `\n[PDF p.${c.pageStart}] ${c.text}`).join('') }));
+  const selected = paperCitations(draftSelections, targetPaper);
+  const prompt = selected.map(c =>
+    `\n<selected-passage-untrusted page="${c.pageStart}">\n${JSON.stringify(c.text)}\n</selected-passage-untrusted>`).join('') + "\n" + askPrompt(targetPaper, question, history);
+  conversation.push({ role: "user", text: question, citations: structuredClone(selected) });
+  draftSelections = [];
+  renderSelectionDraft();
   checkpointWorkspace();
   renderChat();
   setView("ask");
@@ -762,8 +799,14 @@ async function ask(question: string): Promise<void> {
     });
     if (updated && isCurrentPaper(tabId, targetPaper.id)) showStatus("");
   } catch (error) {
-    if (isCurrentPaper(tabId, targetPaper.id))
-      showStatus(error instanceof Error ? error.message : "提问失败。", true);
+    if (isCurrentPaper(tabId, targetPaper.id)) {
+      if (!askInput.value) { askInput.value = question; draftSelections = structuredClone(selected); renderSelectionDraft(); checkpointWorkspace(); }
+      showStatus((error instanceof Error ? error.message : "提问失败。") + ' 问题与引用已保留，可再次发送。', true);
+    } else {
+      await workspaces.updatePaper(tabId, targetPaper.id, ws => {
+        if (!ws.draft) { ws.draft = question; if (!ws.selections?.length) ws.selections = structuredClone(selected); }
+      });
+    }
   } finally {
     setBusy(false, tabId);
     void consumeReaderSelection();
@@ -941,7 +984,6 @@ askForm.addEventListener("submit", event => {
   event.preventDefault();
   const question = askInput.value.trim();
   if (!question) return;
-  askInput.value = "";
   void ask(question);
 });
 askInput.addEventListener("keydown", event => {
@@ -1071,6 +1113,11 @@ async function init(): Promise<void> {
   try {
     credentials = await loadCredentials();
     applyCredentials(credentials);
+    try {
+      readerSettings = await loadReaderSettings();
+      byId<HTMLSelectElement>('readerTrigger').value = readerSettings.trigger;
+      byId<HTMLSelectElement>('readerOpenMode').value = readerSettings.openMode;
+    } catch { /* Defaults remain available if settings cannot be read. */ }
     await refreshActiveTab(false, true);
     await acceptSelection();
   } catch {
@@ -1081,9 +1128,10 @@ async function init(): Promise<void> {
   // The last reading destination is scoped to the restored tab.
   setView(lastReadingView);
 }
-async function readInPaperPeek(page?: number, quote?: string, position?: ReadingPosition): Promise<void> {
+async function readInPaperPeek(page?: number, quote?: string, position?: ReadingPosition, mode = readerSettings.openMode): Promise<void> {
   if (busy || activeTabId === undefined || visibleTabId === undefined) return;
   const origin = activeTabId;
+  document.querySelectorAll<HTMLDetailsElement>('.reader-open-options').forEach(menu => { menu.open = false; });
   try {
     if (!paper) {
       if (!activePdfUrl) throw new Error('请先选择 PDF 或本地文件。');
@@ -1102,7 +1150,7 @@ async function readInPaperPeek(page?: number, quote?: string, position?: Reading
     const target = paper;
     const session = await openReader(origin, target.documentId!, target.sourceUrl, tabUrl,
       activeReadingSession?.sourceTabId ?? visibleTabId,
-      page === undefined ? undefined : { pageNumber: page, exactQuote: quote, verification: quote ? 'quote-verified' : 'model-hint' }, position);
+      page === undefined ? undefined : { pageNumber: page, exactQuote: quote, verification: quote ? 'quote-verified' : 'model-hint' }, position, mode);
     // The background copied the checkpoint before opening/activating the Reader.
     // Never overwrite it with a stale pre-navigation snapshot.
     if (activeTabId === origin) { activeTabId = session.workspaceTabId; activeReadingSession = session; }
@@ -1112,57 +1160,77 @@ async function readInPaperPeek(page?: number, quote?: string, position?: Reading
   } finally { setBusy(false, origin); }
 }
 
-function renderSelectionDraft(): void {
-  selectionDraft.replaceChildren();
-  selectionDraft.hidden = !draftSelection;
-  if (!draftSelection) return;
-  const selected = draftSelection;
-  selectionDraft.append(create('span', '', `PDF 第 ${selected.pageStart}${selected.pageEnd === selected.pageStart ? '' : '–' + selected.pageEnd} 页 · 已选 ${selected.text.length} 字符`),
+function citationCard(selected: ReadingSelection, removable = false): HTMLElement {
+  const card = create('section', 'citation-card');
+  card.append(create('span', 'citation-title', `${paper?.title || '当前论文'} · PDF 第 ${selected.pageStart}${selected.pageEnd === selected.pageStart ? '' : '–' + selected.pageEnd} 页`),
     create('blockquote', '', selected.text));
   const back = create('button', 'button button-secondary', '返回原文');
-  back.type = 'button'; back.onclick = () => void (selected.position ? readInPaperPeek(undefined, undefined, selected.position) : readInPaperPeek(selected.pageStart, selected.anchor.exactQuote));
-  const remove = create('button', 'button button-secondary', '移除引用');
-  remove.type = 'button'; remove.onclick = () => { draftSelection = undefined; renderSelectionDraft(); checkpointWorkspace(); };
-  const translate = create('button', 'button button-secondary', '翻译此选区');
-  translate.type = 'button'; translate.onclick = () => { if (!busy) void translateSelection(selected); };
-  selectionDraft.append(back, translate, remove);
+  back.type = 'button';
+  back.onclick = () => {
+    if (selected.documentId !== paper?.documentId) { showStatus('请先打开此引用对应的 PDF。原文摘录已保留。', true); return; }
+    void readInPaperPeek(selected.pageStart, selected.anchor.exactQuote || selected.text);
+  };
+  card.append(back);
+  if (selected.position) {
+    const position = create('button', 'button button-ghost', '返回阅读位置');
+    position.type = 'button';
+    position.onclick = () => {
+      if (selected.documentId !== paper?.documentId) { showStatus('请先打开此引用对应的 PDF。', true); return; }
+      void readInPaperPeek(undefined, undefined, selected.position);
+    };
+    card.append(position);
+  }
+  if (removable) {
+    const remove = create('button', 'button button-ghost', '移除引用');
+    remove.type = 'button';
+    remove.onclick = () => { draftSelections = draftSelections.filter(item => item !== selected); renderSelectionDraft(); checkpointWorkspace(); void consumeReaderSelection(); };
+    card.append(remove);
+  }
+  return card;
+}
+
+function renderSelectionDraft(): void {
+  selectionDraft.replaceChildren();
+  selectionDraft.hidden = !draftSelections.length;
+  for (const selected of draftSelections) selectionDraft.append(citationCard(selected, true));
 }
 
 async function consumeReaderSelection(): Promise<void> {
   if (!activeReadingSession || !paper || activeTabId === undefined) return;
   const session = activeReadingSession;
-  const key = selectionKey(session.sessionId);
-  const request = (await chrome.storage.session.get(key))[key] as SelectionRequest | undefined;
-  if (!request || request.requestId === handledSelection || request.selection.documentId !== paper.documentId) return;
-  if (busy) { showStatus('选区已保留，当前请求完成后可继续。'); return; }
-  const apply = async () => {
-    handledSelection = request.requestId;
-    pendingSelection.hidden = true;
-    const claim = await loopMessage<{ consumed: boolean }>({ type: 'reader-consume', sessionId: session.sessionId, requestId: request.requestId });
-    if (!claim.consumed) return;
-    if (activeReadingSession?.sessionId !== session.sessionId) return;
-    draftSelection = request.selection;
-    renderSelectionDraft();
-    setView('ask');
-    checkpointWorkspace();
-    if (request.action === 'translate') await translateSelection(request.selection);
-    else { showStatus('选区已加入草稿，填写问题后再发送。'); askInput.focus(); }
-  };
-  if (askInput.value.trim() || draftSelection) {
-    pendingSelection.replaceChildren(create('span', '', '有新的选区。保留当前草稿，还是使用新选区？'));
-    const replace = create('button', 'button button-secondary', '使用新选区');
-    replace.onclick = () => { askInput.value = ''; void apply(); };
-    const dismiss = create('button', 'button button-secondary', '保留当前草稿');
-    dismiss.onclick = () => { handledSelection = request.requestId; pendingSelection.hidden = true; void loopMessage({ type: 'reader-consume', sessionId: session.sessionId, requestId: request.requestId }); };
-    pendingSelection.append(replace, dismiss); pendingSelection.hidden = false; setView('ask');
-  } else await apply();
+  const owner = activeTabId, target = paper;
+  const request = (await chrome.storage.session.get(selectionKey(session.sessionId)))[selectionKey(session.sessionId)] as SelectionRequest | undefined;
+  if (!request || request.requestId === handledSelection || activeReadingSession?.sessionId !== session.sessionId ||
+      !paperCitations([request.selection], target).length) return;
+  if (busy) { showStatus('引用已保留，当前请求完成后加入草稿。'); return; }
+  const duplicate = draftSelections.some(s => s.documentId === request.selection.documentId && s.pageStart === request.selection.pageStart && s.pageEnd === request.selection.pageEnd && s.text === request.selection.text);
+  if (!duplicate && (draftSelections.length >= 8 || draftSelections.reduce((n, s) => n + s.text.length, 0) + request.selection.text.length > 24000)) {
+    showStatus('草稿最多包含 8 处引用 / 24000 字符。请先发送或移除部分引用，再重试。', true);
+    return;
+  }
+  const claim = await loopMessage<{ consumed: boolean }>({ type: 'reader-consume', sessionId: session.sessionId, requestId: request.requestId });
+  if (!claim.consumed) return;
+  if (activeReadingSession?.sessionId !== session.sessionId || !isCurrentPaper(owner, target.id)) {
+    await workspaces.updatePaper(owner, target.id, ws => {
+      const refs = ws.selections || (ws.selection ? [ws.selection] : []);
+      if (!refs.some(item => item.documentId === request.selection.documentId && item.pageStart === request.selection.pageStart && item.text === request.selection.text)) refs.push(request.selection);
+      ws.selections = refs; ws.selection = undefined; ws.view = 'ask';
+    });
+    return;
+  }
+  handledSelection = request.requestId;
+  pendingSelection.hidden = true;
+  if (!duplicate) draftSelections.push(request.selection);
+  renderSelectionDraft(); setView('ask'); checkpointWorkspace();
+  if (request.action === 'translate') await translateSelection(request.selection);
+  else { showStatus('引用已加入草稿；原问题已保留，确认后发送。'); askInput.focus(); }
 }
 
 async function translateSelection(selection: ReadingSelection): Promise<void> {
   if (!paper || activeTabId === undefined) return;
   if (!credentials.apiKey.trim()) { setView('settings'); showStatus('请先配置服务商，再在原文点击“译”。选区已保留。'); return; }
   const target = paper, owner = activeTabId;
-  conversation.push({ role: 'user', text: `翻译选区 [PDF p.${selection.pageStart}]\n${selection.text}` });
+  conversation.push({ role: 'user', text: `翻译此选区。`, citations: [structuredClone(selection)] });
   checkpointWorkspace(); renderChat(); setBusy(true, owner); showStatus('正在翻译选区……');
   try {
     const answer = await generateText(currentRequest(translationPrompt(target, selection)));
@@ -1189,4 +1257,15 @@ chrome.runtime.onMessage?.addListener((message, sender, respond) => {
 });
 
 openReaderBtn.addEventListener("click", () => void readInPaperPeek());
+byId('openReaderHere').addEventListener('click', () => void readInPaperPeek(undefined, undefined, undefined, 'current-tab'));
+byId('openReaderNew').addEventListener('click', () => void readInPaperPeek(undefined, undefined, undefined, 'new-tab'));
+byId('readerSettingsForm').addEventListener('submit', event => {
+  event.preventDefault();
+  const trigger = byId<HTMLSelectElement>('readerTrigger').value as ReaderSettings['trigger'];
+  const openMode = byId<HTMLSelectElement>('readerOpenMode').value as ReaderSettings['openMode'];
+  void saveReaderSettings({ trigger, openMode }).then(() => {
+    readerSettings = { ...readerSettings, trigger, openMode };
+    showStatus('阅读设置已保存。');
+  }).catch(() => showStatus('阅读设置保存失败，请重试。', true));
+});
 void init();
