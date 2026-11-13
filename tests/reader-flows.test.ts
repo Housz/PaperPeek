@@ -482,6 +482,45 @@ describe("reader journeys (actual Side Panel DOM with mocked Chrome/API)", () =>
     expect(byId('selectionDraft').querySelectorAll('.citation-card')).toHaveLength(1);
   });
 
+  it('hides the Reader entry in the active Reader and restores it on the native/source tab', async () => {
+    await openLoop();
+    expect(byId('readerEntryRow').hidden).toBe(false);
+    const menu = document.querySelector<HTMLDetailsElement>('.reader-open-options')!; menu.open = true;
+    setTab(1101, 'chrome-extension://test-extension-id/reader.html?session=session-101');
+    await vi.waitFor(() => expect(byId('readerEntryRow').hidden).toBe(true));
+    expect(menu.open).toBe(false);expect(byId<HTMLButtonElement>('openReaderBtn').disabled).toBe(true);
+    expect(byId<HTMLButtonElement>('openReaderHere').disabled).toBe(true);
+    expect(byId('paperTitle').textContent).toBe('Paper A');
+    setTab(101, 'https://arxiv.org/pdf/2601.00001');
+    await vi.waitFor(() => expect(byId('readerEntryRow').hidden).toBe(false));
+    expect(byId<HTMLButtonElement>('openReaderBtn').disabled).toBe(false);
+  });
+
+  it('updates Reader entry on same-tab Back/Forward without discarding the shared workspace', async () => {
+    await openLoop();
+    const session = storage['paperpeek.readingSession.v1.session-101'] as {readerTabId:number;openMode?:string};
+    session.readerTabId = 101;session.openMode = 'current-tab';
+    setTab(101, 'chrome-extension://test-extension-id/reader.html?session=session-101');
+    await vi.waitFor(() => expect(byId('readerEntryRow').hidden).toBe(true));
+    setTab(101, 'https://arxiv.org/pdf/2601.00001');
+    await vi.waitFor(() => expect(byId('readerEntryRow').hidden).toBe(false));
+    expect(byId('paperTitle').textContent).toBe('Paper A');
+    setTab(101, 'chrome-extension://test-extension-id/reader.html?session=session-101');
+    await vi.waitFor(() => expect(byId('readerEntryRow').hidden).toBe(true));
+    await mountSidePanel();
+    await vi.waitFor(() => expect(byId('paperTitle').textContent).toBe('Paper A'));
+    expect(byId('readerEntryRow').hidden).toBe(true);
+  });
+
+  it('keeps the Reader entry out of settings, empty tabs and expired Reader pages', async () => {
+    await openLoop(); click('settingsToggle');expect(byId('readerEntryRow').hidden).toBe(true);
+    click('settingsToggle');expect(byId('readerEntryRow').hidden).toBe(false);
+    setTab(900, 'https://example.com/');await vi.waitFor(() => expect(byId('paperTitle').textContent).toBe('未选择论文'));
+    expect(byId('readerEntryRow').hidden).toBe(true);
+    setTab(901, 'chrome-extension://test-extension-id/reader.html?session=expired');
+    await new Promise(resolve => setTimeout(resolve,30));expect(byId('readerEntryRow').hidden).toBe(true);
+  });
+
   it('lets the user explicitly choose current-tab Reader without an AI request', async () => {
     await openLoop(); const calls = mock.generate.mock.calls.length;
     click('openReaderHere');

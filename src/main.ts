@@ -82,6 +82,7 @@ let draftSelections: ReadingSelection[] = [];
 let readerSettings: ReaderSettings = { trigger: "direct", openMode: "new-tab", navOpen: false, navWidth: 260 };
 let activeReadingSession: ReadingSession | null = null;
 let visibleTabId: number | undefined;
+let visibleTabUrl = "";
 let handledSelection = '';
 const localPdfBytes = new Map<string, ArrayBuffer>();
 const workspaces = new TabWorkspaceManager();
@@ -311,8 +312,27 @@ function documentLabel(raw: string): string {
   } catch { return "当前 PDF"; }
 }
 
+function isVisibleReader(): boolean {
+  try {
+    const url = new URL(visibleTabUrl);
+    return url.href.split(/[?#]/)[0] === chrome.runtime.getURL('reader.html');
+  } catch { return false; }
+}
+
+function renderReaderEntry(hasPaper: boolean): void {
+  // The workspace retains the source URL even while its Reader is active.
+  // Inspect the actual visible tab URL, not workspace identity or tab ID alone:
+  // same-tab Back uses the same ID for the native/source page and the Reader.
+  const hidden = !hasPaper || currentView === 'settings' || isVisibleReader();
+  byId('readerEntryRow').hidden = hidden;
+  openReaderBtn.disabled = hidden || busy;
+  for (const id of ['openReaderHere', 'openReaderNew']) byId<HTMLButtonElement>(id).disabled = hidden || busy;
+  if (hidden) document.querySelectorAll<HTMLDetailsElement>('.reader-open-options').forEach(menu => { menu.open = false; });
+}
+
 function renderPaperState(): void {
   const hasPaper = !!paper || !!activePdfUrl;
+  renderReaderEntry(hasPaper);
   paperTitle.textContent = currentView === "settings" ? "模型与 API Key" :
     paper?.title || (activePdfUrl ? documentLabel(activePdfUrl) : "未选择论文");
   paperTitle.title = paperTitle.textContent || "";
@@ -492,13 +512,14 @@ async function refreshActiveTab(thorough = false, rescan = false): Promise<void>
   const generation = ++scanGeneration;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (generation !== scanGeneration) return;
-  visibleTabId = tab?.id;
   let related = tab?.id !== undefined ? await sessionForTab(tab.id) : null;
   if (related && tab?.id !== undefined && !sessionMatchesTab(related, tab.id, tab?.url || '')) {
     await loopMessage({ type: 'reader-detach', tabId: tab.id }); related = null;
   }
   if (generation !== scanGeneration) return;
   activeReadingSession = related;
+  visibleTabId = tab?.id;
+  visibleTabUrl = tab?.url || "";
   const url = related ? related.sourceTabUrl : tabIdentity(tab?.url);
   const id = related ? related.workspaceTabId : tab?.id;
   const changed = id !== activeTabId || url !== tabUrl;
@@ -538,6 +559,8 @@ async function refreshActiveTab(thorough = false, rescan = false): Promise<void>
     }
   }
 
+  // Source/Reader switches can share the exact same workspace: refresh view-only controls too.
+  renderPaperState();
   if (related) { await consumeReaderSelection(); return; }
   const stillCurrent = () =>
     generation === scanGeneration && activeTabId === id && tabUrl === url;
