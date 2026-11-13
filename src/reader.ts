@@ -25,6 +25,8 @@ let scale = 1.2;
 let rotation = 0;
 let fit = true;
 let epoch = 0;
+let layoutRequest = 0;
+let layoutPromise: Promise<boolean> | null = null;
 let currentPage = 1;
 let pendingAnchor: PdfAnchor | undefined;
 let pendingReturn: {documentId:string;position:ReadingPosition} | undefined;
@@ -89,7 +91,10 @@ async function extract(p:PageState) {
   }
   p.text=text;p.segments=segments;
 }
-async function renderPage(p:PageState):Promise<void>{
+async function renderPage(p:PageState,duringLayout=false):Promise<void>{
+  // Navigation and observer callbacks must not attach a canvas while layout is clearing layers.
+  while(!duringLayout&&layoutPromise)await layoutPromise;
+  if(!pages.includes(p))return;
   if(p.rendered)return; if(p.rendering)return p.rendering;
   const thisEpoch=epoch; p.epoch=thisEpoch;
   p.rendering=(async()=>{
@@ -179,21 +184,43 @@ async function navigate(anchor:PdfAnchor){
   saveReturn();if(!await goPage(anchor.pageNumber,request)||request!==navigationEpoch)return;const rects=result.level==='A'&&result.textOffsets?exactRects(p,result.textOffsets):[];if(rects.length)showRects(p,rects);
   status(rects.length?`PDF 第 ${anchor.pageNumber} 页 · 已定位原文`:`PDF 第 ${anchor.pageNumber} 页 · 页面级定位，未定位具体段落`);
 }
-async function rescale(next:number,nextRotation=rotation){
-  if(!pdf)return;const before=pages[currentPage-1];const fraction=before?(window.scrollY-before.element.offsetTop)/before.element.offsetHeight:0;
-  scale=Math.min(3.5,Math.max(.35,next));rotation=nextRotation;epoch++;clearHighlights();hideSelection();
-  await Promise.all(pages.map(p=>p.rendering));for(const p of pages){p.rendered=false;p.element.replaceChildren();}
-  sizePages();watchPages();const target=pages[currentPage-1];if(target){await renderPage(target);window.scrollTo(0,target.element.offsetTop+fraction*target.element.offsetHeight);}
-  $('fitWidth').textContent=fit?'适合宽度':`${Math.round(scale*100)}%`;schedulePositionSave();
+function rescale(next:number,nextRotation=rotation):Promise<boolean>{
+  if(!pdf)return Promise.resolve(false);
+  const requestedScale=Math.min(3.5,Math.max(.35,next));
+  if(!layoutPromise&&requestedScale===scale&&nextRotation===rotation){
+    $('fitWidth').textContent=fit?'适合宽度':`${Math.round(scale*100)}%`;
+    return Promise.resolve(true);
+  }
+  const request=++layoutRequest,currentPages=pages,before=pages[currentPage-1];
+  const fraction=before&&before.element.offsetHeight?(window.scrollY-before.element.offsetTop)/before.element.offsetHeight:0;
+  // Update desired scale synchronously so rapid zoom/rotate clicks compose correctly.
+  scale=requestedScale;rotation=nextRotation;epoch++;observer?.disconnect();clearHighlights();hideSelection();
+  const operation=(async()=>{
+    await Promise.all(currentPages.map(p=>p.rendering));
+    if(request!==layoutRequest||currentPages!==pages)return false;
+    for(const p of currentPages){p.rendered=false;p.element.replaceChildren();p.domRuns=[];}
+    sizePages();watchPages();const target=pages[currentPage-1];
+    if(target){
+      await renderPage(target,true);
+      if(request!==layoutRequest||currentPages!==pages)return false;
+      window.scrollTo(0,target.element.offsetTop+fraction*target.element.offsetHeight);
+    }
+    $('fitWidth').textContent=fit?'适合宽度':`${Math.round(scale*100)}%`;schedulePositionSave();return true;
+  })();
+  layoutPromise=operation;
+  const settled=()=>{if(layoutPromise===operation)layoutPromise=null;};
+  void operation.then(settled,settled);
+  return operation;
 }
 function fitScale(){const p=pages[currentPage-1]?.page;if(!p)return 1;return Math.min(3.5,(pagesRoot.clientWidth-40)/p.getViewport({scale:1,rotation:(p.rotate+rotation)%360}).width);}
-async function restorePosition(p:ReadingPosition){navigationEpoch++;fit=false;currentPage=p.pageNumber;await rescale(p.scale,p.rotation);window.scrollTo(0,p.scrollTop);pagesRoot.scrollLeft=p.scrollLeft;updatePageNumber();schedulePositionSave();}
+async function restorePosition(p:ReadingPosition){const request=++navigationEpoch;fit=false;currentPage=p.pageNumber;if(!await rescale(p.scale,p.rotation)||request!==navigationEpoch)return;window.scrollTo(0,p.scrollTop);pagesRoot.scrollLeft=p.scrollLeft;updatePageNumber();schedulePositionSave();}
 function setNavigation(open:boolean,persist=true){
+  const changed=$('navigation').hidden===open;
   $('navigation').hidden=!open;document.body.classList.toggle('navigation-open',open);
   $('outlineToggle').setAttribute('aria-expanded',String(open));
   settings.navOpen=open;
-  if(persist)void saveReaderSettings({navOpen:open}).catch(()=>status('导航设置未能保存。',true));
-  if(fit&&pdf)void rescale(fitScale());
+  if(persist&&changed)void saveReaderSettings({navOpen:open}).catch(()=>status('导航设置未能保存。',true));
+  if(changed&&fit&&pdf)void rescale(fitScale());
 }
 function setNavigationView(view:'outline'|'discussions'){
   $('outline').hidden=view!=='outline';$('discussions').hidden=view!=='discussions';
@@ -245,7 +272,7 @@ async function load(bytes:ArrayBuffer){
   if(bytes.byteLength>MAX_PDF_BYTES)throw new Error('PDF 超过 25 MiB 限制。');
   const actual=await fingerprintPdf(bytes);
   if(init?.documentId&&actual!==init.documentId)throw new Error('PDF 内容与当前阅读会话不一致。请返回侧栏重新载入论文，避免错误引用。');
-  documentId=actual;epoch++;observer?.disconnect();await pdf?.destroy();
+  documentId=actual;layoutRequest++;epoch++;observer?.disconnect();await pdf?.destroy();
   pdf=await getDocument({data:new Uint8Array(bytes)}).promise;pages=[];pagesRoot.replaceChildren();
   for(let n=1;n<=pdf.numPages;n++){
     const page=await pdf.getPage(n);const element=document.createElement('section');element.className='pdf-page';element.dataset.page=String(n);element.setAttribute('aria-label',`PDF 第 ${n} 页`);
@@ -432,7 +459,12 @@ $('navResize').onpointerdown=e=>{e.preventDefault();const element=$('navResize')
 $('navResize').onkeydown=e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();setNavWidth(settings.navWidth+(e.key==='ArrowRight'?20:-20),true);}};
 if(chrome.storage?.onChanged)chrome.storage.onChanged.addListener((changes,area)=>{
   if(area!=='local')return;
-  if(changes[READER_SETTINGS_KEY])void loadReaderSettings().then(next=>{settings=next;setNavWidth(settings.navWidth);setNavigation(settings.navOpen,false);}).catch(()=>undefined);
+  if(changes[READER_SETTINGS_KEY])void loadReaderSettings().then(next=>{
+    const widthChanged=next.navWidth!==settings.navWidth,openChanged=next.navOpen!==settings.navOpen;
+    settings=next;setNavWidth(next.navWidth);setNavigation(next.navOpen,false);
+    // Opening already schedules one fit; width-only changes need their own fit.
+    if(widthChanged&&!openChanged&&next.navOpen&&fit&&pdf)void rescale(fitScale());
+  }).catch(()=>undefined);
   for(const [key,change] of Object.entries(changes)){
     if(!key.startsWith('paperpeek.annotation.v1.')||change.newValue!==undefined)continue;
     const old=change.oldValue as Annotation|undefined;

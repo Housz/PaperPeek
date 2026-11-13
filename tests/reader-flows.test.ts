@@ -141,12 +141,12 @@ async function openLoop(): Promise<void> {
   await vi.waitFor(() => expect(storage['paperpeek.readingSession.v1.session-101']).toBeDefined());
   await new Promise(resolve => setTimeout(resolve, 30));
 }
-function selectionRequest(action: 'ask' | 'translate' | 'cite', id = 'selection-1', text = 'Results improved accuracy on three datasets.'): void {
+function selectionRequest(action: 'ask' | 'translate' | 'cite', id = 'selection-1', text = 'Results improved accuracy on three datasets.', context: {prefix?: string; suffix?: string} = {}): void {
   const sessionId = 'session-101', documentId = 'sha256:paper-a';
   const request = { action, requestId: id, selection: { sessionId, documentId,
     text, pageStart: 2, pageEnd: 2, at: Date.now(),
     position: {pageNumber:2,scrollTop:435,scrollLeft:12,scale:1.8,rotation:90},
-    anchor: { sessionId, documentId, pageNumber: 2, exactQuote: text, verification: 'quote-verified' } } };
+    anchor: { sessionId, documentId, pageNumber: 2, exactQuote: text, verification: 'quote-verified', ...context } } };
   const key = 'paperpeek.readerSelection.' + sessionId; storage[key] = request;
   for (const callback of events.storage) callback({ [key]: { newValue: request } }, 'session');
 }
@@ -446,6 +446,28 @@ describe("reader journeys (actual Side Panel DOM with mocked Chrome/API)", () =>
     [...document.querySelectorAll<HTMLButtonElement>('.message.user .citation-card button')].find(b => b.textContent === '返回原文')!.click();
     await vi.waitFor(() => expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
       type: 'open-reader', anchor: expect.objectContaining({ exactQuote: 'Results improved accuracy on three datasets.', pageNumber: 2 })
+    })));
+  });
+
+  it('retains repeated text at different locations and preserves its complete anchor after sending and reopening', async () => {
+    await openLoop();
+    const text = 'Repeated statement';
+    selectionRequest('cite', 'first', text, {prefix:'First occurrence: ',suffix:' first ending'});
+    await vi.waitFor(() => expect(byId('selectionDraft').querySelectorAll('.citation-card')).toHaveLength(1));
+    selectionRequest('cite', 'second', text, {prefix:'Second occurrence: ',suffix:' second ending'});
+    await vi.waitFor(() => expect(byId('selectionDraft').querySelectorAll('.citation-card')).toHaveLength(2));
+    selectionRequest('cite', 'duplicate', text, {prefix:'Second occurrence: ',suffix:' second ending'});
+    await vi.waitFor(() => expect(storage['paperpeek.readerSelection.session-101']).toBeUndefined());
+    expect(byId('selectionDraft').querySelectorAll('.citation-card')).toHaveLength(2);
+    byId<HTMLTextAreaElement>('askInput').value = 'Compare these occurrences';
+    byId<HTMLFormElement>('askForm').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+    await vi.waitFor(() => expect(document.querySelector('.message.assistant')).not.toBeNull());
+    await mountSidePanel();
+    await vi.waitFor(() => expect(document.querySelectorAll('.message.user .citation-card')).toHaveLength(2));
+    const cards = document.querySelectorAll('.message.user .citation-card');
+    (cards[1].querySelector('button') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type:'open-reader',anchor: {pageNumber:2,exactQuote:text,prefix:'Second occurrence: ',suffix:' second ending',verification:'quote-verified'}
     })));
   });
 

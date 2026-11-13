@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 const html=readFileSync(resolve(process.cwd(),'reader.html'),'utf8');
-const mocks=vi.hoisted(()=>({fingerprint:vi.fn(async()=> 'sha256:fixture'),fetchPdf:vi.fn(async()=>new ArrayBuffer(8)),getDocument:vi.fn(),listeners:[] as Function[],storageListeners:[] as Function[],send:vi.fn(),open:vi.fn(async()=>undefined),generate:vi.fn(async(_req:any,_fetcher?:any)=> 'A local explanation.'),data:{} as Record<string,unknown>}));
+const mocks=vi.hoisted(()=>({fingerprint:vi.fn(async()=> 'sha256:fixture'),fetchPdf:vi.fn(async()=>new ArrayBuffer(8)),getDocument:vi.fn(),render:vi.fn((_options?:any)=>({promise:Promise.resolve()})),listeners:[] as Function[],storageListeners:[] as Function[],send:vi.fn(),open:vi.fn(async()=>undefined),generate:vi.fn(async(_req:any,_fetcher?:any)=> 'A local explanation.'),data:{} as Record<string,unknown>}));
 vi.mock('../src/lib/provider',()=>({generateText:(req:any,fetcher?:any)=>mocks.generate(req,fetcher)}));
 vi.mock('../src/lib/storage',()=>({loadCredentials:vi.fn(async()=>({provider:'openai',model:'gpt-4.1-mini',apiKey:'dummy-test-only',rememberKey:false}))}));
 vi.mock('../src/lib/document',()=>({fetchPdf:mocks.fetchPdf,MAX_PDF_BYTES:25*1024*1024}));
@@ -15,9 +15,9 @@ vi.mock('pdfjs-dist',()=>({
 const init={sessionId:'session-a',documentId:'sha256:fixture',sourceUrl:'https://example.org/a.pdf'};
 const byId=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
 async function settle(){for(let i=0;i<20;i++)await new Promise(r=>setTimeout(r,0));}
-function page(n:number){return {pageNumber:n,rotate:0,userUnit:1,getViewport:({scale}:any)=>({width:600*scale,height:800*scale,transform:[1,0,0,1,0,0],convertToPdfPoint:(x:number,y:number)=>[x,y],convertToViewportPoint:(x:number,y:number)=>[x,y],convertToViewportRectangle:(r:number[])=>r}),render:()=>({promise:Promise.resolve()}),getTextContent:async()=>({items:[{str:`Evidence on page ${n}.`,hasEOL:true,transform:[1,0,0,12,10,25],width:100}]}),getAnnotations:async()=>[]};}
+function page(n:number){return {pageNumber:n,rotate:0,userUnit:1,getViewport:({scale}:any)=>({width:600*scale,height:800*scale,transform:[1,0,0,1,0,0],convertToPdfPoint:(x:number,y:number)=>[x,y],convertToViewportPoint:(x:number,y:number)=>[x,y],convertToViewportRectangle:(r:number[])=>r}),render:(options:any)=>mocks.render(options),getTextContent:async()=>({items:[{str:`Evidence on page ${n}.`,hasEOL:true,transform:[1,0,0,12,10,25],width:100}]}),getAnnotations:async()=>[]};}
 beforeEach(()=>{
-  vi.resetModules();vi.clearAllMocks();mocks.listeners.length=0;mocks.storageListeners.length=0;mocks.data={};mocks.generate.mockResolvedValue('A local explanation.');
+  vi.resetModules();vi.clearAllMocks();mocks.listeners.length=0;mocks.storageListeners.length=0;mocks.data={};mocks.generate.mockResolvedValue('A local explanation.');mocks.render.mockImplementation(()=>({promise:Promise.resolve()}));
   document.documentElement.innerHTML=html;window.history.replaceState({},'', '/reader.html?session=session-a');
   vi.stubGlobal('IntersectionObserver',class{observe(){}disconnect(){}});
   vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue({} as any);
@@ -149,6 +149,28 @@ describe('Reader UI (PDF canvas and Chrome mocked; not browser acceptance)',()=>
     await settle();expect(reply).not.toHaveBeenCalled();
   });
 
+  it('does not redraw for its own unchanged navigation settings notification',async()=>{
+    Object.defineProperty(byId('pages'),'clientWidth',{configurable:true,get:()=>document.body.classList.contains('navigation-open')?540:800});
+    await import('../src/reader');await settle();const before=mocks.render.mock.calls.length;
+    byId('outlineToggle').click();await settle();expect(mocks.render.mock.calls.length).toBe(before+1);
+    const canvas=document.querySelector('.pdf-page canvas'),text=document.querySelector('.pdf-page .textLayer');
+    const key='paperpeek.readerSettings.v1';mocks.storageListeners[0]({[key]:{newValue:mocks.data[key]}},'local');await settle();
+    expect(mocks.render.mock.calls.length).toBe(before+1);expect(document.querySelector('.pdf-page canvas')).toBe(canvas);expect(document.querySelector('.pdf-page .textLayer')).toBe(text);
+    mocks.data[key]={...(mocks.data[key] as object),trigger:'ctrl'};mocks.storageListeners[0]({[key]:{newValue:mocks.data[key]}},'local');await settle();expect(mocks.render.mock.calls.length).toBe(before+1);
+  });
+  it('keeps only the latest canvas and text after rapid zoom during an outstanding render',async()=>{
+    Object.defineProperty(byId('pages'),'clientWidth',{configurable:true,value:800});
+    await import('../src/reader');await settle();let finish!:()=>void;
+    mocks.render.mockImplementationOnce(()=>({promise:new Promise<void>(r=>{finish=r;})}));
+    byId('zoomIn').click();await vi.waitFor(()=>expect(finish).toBeTypeOf('function'));
+    byId('zoomOut').click();byId('zoomIn').click();byId('zoomIn').click();
+    finish();await settle();
+    const first=document.querySelector<HTMLElement>('.pdf-page')!;
+    expect(first.querySelectorAll('canvas')).toHaveLength(1);expect(first.querySelectorAll('.textLayer')).toHaveLength(1);
+    expect(first.querySelector('.textLayer')?.textContent).toContain('Evidence on page 1.');
+    expect(parseFloat(first.style.width)).toBeCloseTo(760*1.2*1.2);
+    expect(byId('fitWidth').textContent).toBe('182%');
+  });
   it('checkpoints horizontal page-container scrolling without a window scroll',async()=>{
     await import('../src/reader');await settle();
     byId('pages').scrollLeft=177;byId('pages').dispatchEvent(new Event('scroll'));

@@ -1,4 +1,4 @@
-import { getReadingSession, sessionMatchesTab, sessionForTab, sessionForWorkspace, type ReadingSession, type ReadingSelection, type ReadingPosition } from "./lib/reading-loop";
+import { getReadingSession, sessionMatchesTab, sessionForTab, sessionForWorkspace, type ReadingSession, type ReadingSelection, type ReadingPosition, type PdfAnchor } from "./lib/reading-loop";
 import { openReader, selectionKey, loopMessage, type SelectionRequest } from "./lib/reader-bridge";
 import { loadReaderSettings, saveReaderSettings, type ReaderSettings } from "./lib/reader-settings";
 import { translationPrompt } from "./lib/translation";
@@ -1128,7 +1128,7 @@ async function init(): Promise<void> {
   // The last reading destination is scoped to the restored tab.
   setView(lastReadingView);
 }
-async function readInPaperPeek(page?: number, quote?: string, position?: ReadingPosition, mode = readerSettings.openMode): Promise<void> {
+async function readInPaperPeek(page?: number, quote?: string, position?: ReadingPosition, mode = readerSettings.openMode, sourceAnchor?: Omit<PdfAnchor, 'sessionId' | 'documentId'>): Promise<void> {
   if (busy || activeTabId === undefined || visibleTabId === undefined) return;
   const origin = activeTabId;
   document.querySelectorAll<HTMLDetailsElement>('.reader-open-options').forEach(menu => { menu.open = false; });
@@ -1150,7 +1150,7 @@ async function readInPaperPeek(page?: number, quote?: string, position?: Reading
     const target = paper;
     const session = await openReader(origin, target.documentId!, target.sourceUrl, tabUrl,
       activeReadingSession?.sourceTabId ?? visibleTabId,
-      page === undefined ? undefined : { pageNumber: page, exactQuote: quote, verification: quote ? 'quote-verified' : 'model-hint' }, position, mode);
+      sourceAnchor || (page === undefined ? undefined : { pageNumber: page, exactQuote: quote, verification: quote ? 'quote-verified' : 'model-hint' }), position, mode);
     // The background copied the checkpoint before opening/activating the Reader.
     // Never overwrite it with a stale pre-navigation snapshot.
     if (activeTabId === origin) { activeTabId = session.workspaceTabId; activeReadingSession = session; }
@@ -1168,7 +1168,8 @@ function citationCard(selected: ReadingSelection, removable = false): HTMLElemen
   back.type = 'button';
   back.onclick = () => {
     if (selected.documentId !== paper?.documentId) { showStatus('请先打开此引用对应的 PDF。原文摘录已保留。', true); return; }
-    void readInPaperPeek(selected.pageStart, selected.anchor.exactQuote || selected.text);
+    const { pageNumber, exactQuote, prefix, suffix, verification } = selected.anchor;
+    void readInPaperPeek(undefined, undefined, undefined, readerSettings.openMode, { pageNumber, exactQuote, prefix, suffix, verification });
   };
   card.append(back);
   if (selected.position) {
@@ -1195,6 +1196,12 @@ function renderSelectionDraft(): void {
   for (const selected of draftSelections) selectionDraft.append(citationCard(selected, true));
 }
 
+function sameCitation(a: ReadingSelection, b: ReadingSelection): boolean {
+  return a.documentId === b.documentId && a.pageStart === b.pageStart && a.pageEnd === b.pageEnd && a.text === b.text &&
+    a.anchor.pageNumber === b.anchor.pageNumber && a.anchor.exactQuote === b.anchor.exactQuote &&
+    a.anchor.prefix === b.anchor.prefix && a.anchor.suffix === b.anchor.suffix && a.anchor.verification === b.anchor.verification;
+}
+
 async function consumeReaderSelection(): Promise<void> {
   if (!activeReadingSession || !paper || activeTabId === undefined) return;
   const session = activeReadingSession;
@@ -1203,7 +1210,7 @@ async function consumeReaderSelection(): Promise<void> {
   if (!request || request.requestId === handledSelection || activeReadingSession?.sessionId !== session.sessionId ||
       !paperCitations([request.selection], target).length) return;
   if (busy) { showStatus('引用已保留，当前请求完成后加入草稿。'); return; }
-  const duplicate = draftSelections.some(s => s.documentId === request.selection.documentId && s.pageStart === request.selection.pageStart && s.pageEnd === request.selection.pageEnd && s.text === request.selection.text);
+  const duplicate = draftSelections.some(s => sameCitation(s, request.selection));
   if (!duplicate && (draftSelections.length >= 8 || draftSelections.reduce((n, s) => n + s.text.length, 0) + request.selection.text.length > 24000)) {
     showStatus('草稿最多包含 8 处引用 / 24000 字符。请先发送或移除部分引用，再重试。', true);
     return;
@@ -1213,7 +1220,7 @@ async function consumeReaderSelection(): Promise<void> {
   if (activeReadingSession?.sessionId !== session.sessionId || !isCurrentPaper(owner, target.id)) {
     await workspaces.updatePaper(owner, target.id, ws => {
       const refs = ws.selections || (ws.selection ? [ws.selection] : []);
-      if (!refs.some(item => item.documentId === request.selection.documentId && item.pageStart === request.selection.pageStart && item.text === request.selection.text)) refs.push(request.selection);
+      if (!refs.some(item => sameCitation(item, request.selection))) refs.push(request.selection);
       ws.selections = refs; ws.selection = undefined; ws.view = 'ask';
     });
     return;
