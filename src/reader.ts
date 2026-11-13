@@ -27,6 +27,8 @@ let fit = true;
 let epoch = 0;
 let layoutRequest = 0;
 let layoutPromise: Promise<boolean> | null = null;
+interface ZoomAnchor { page: PageState; x: number; y: number; clientX: number; clientY: number }
+let wheelAnchor: ZoomAnchor | undefined;
 let currentPage = 1;
 let pendingAnchor: PdfAnchor | undefined;
 let pendingReturn: {documentId:string;position:ReadingPosition} | undefined;
@@ -184,8 +186,9 @@ async function navigate(anchor:PdfAnchor){
   saveReturn();if(!await goPage(anchor.pageNumber,request)||request!==navigationEpoch)return;const rects=result.level==='A'&&result.textOffsets?exactRects(p,result.textOffsets):[];if(rects.length)showRects(p,rects);
   status(rects.length?`PDF 第 ${anchor.pageNumber} 页 · 已定位原文`:`PDF 第 ${anchor.pageNumber} 页 · 页面级定位，未定位具体段落`);
 }
-function rescale(next:number,nextRotation=rotation):Promise<boolean>{
+function rescale(next:number,nextRotation=rotation,anchor?:ZoomAnchor):Promise<boolean>{
   if(!pdf)return Promise.resolve(false);
+  if(!anchor)wheelAnchor=undefined;
   const requestedScale=Math.min(3.5,Math.max(.35,next));
   if(!layoutPromise&&requestedScale===scale&&nextRotation===rotation){
     $('fitWidth').textContent=fit?'适合宽度':`${Math.round(scale*100)}%`;
@@ -199,11 +202,16 @@ function rescale(next:number,nextRotation=rotation):Promise<boolean>{
     await Promise.all(currentPages.map(p=>p.rendering));
     if(request!==layoutRequest||currentPages!==pages)return false;
     for(const p of currentPages){p.rendered=false;p.element.replaceChildren();p.domRuns=[];}
-    sizePages();watchPages();const target=pages[currentPage-1];
+    sizePages();watchPages();const target=anchor?.page||pages[currentPage-1];
     if(target){
       await renderPage(target,true);
       if(request!==layoutRequest||currentPages!==pages)return false;
-      window.scrollTo(0,target.element.offsetTop+fraction*target.element.offsetHeight);
+      if(anchor&&pages.includes(anchor.page)){
+        const box=anchor.page.element.getBoundingClientRect();
+        // Move both scroll containers so the same PDF point stays beneath the pointer.
+        pagesRoot.scrollLeft+=box.left+anchor.x*box.width-anchor.clientX;
+        window.scrollTo(window.scrollX,Math.max(0,window.scrollY+box.top+anchor.y*box.height-anchor.clientY));
+      }else window.scrollTo(0,target.element.offsetTop+fraction*target.element.offsetHeight);
     }
     $('fitWidth').textContent=fit?'适合宽度':`${Math.round(scale*100)}%`;schedulePositionSave();return true;
   })();
@@ -281,7 +289,7 @@ async function load(bytes:ArrayBuffer){
   try{records=await loadAnnotations(documentId);}catch{records=[];status('无法读取本机讨论，原文阅读仍可继续。',true);}
   await outline();renderDiscussions();
   $('pageCount').textContent=String(pdf.numPages);scale=fitScale();sizePages();watchPages();await renderPage(pages[0]);
-  status(`${pdf.numPages} 页 · 选择文字后可问 / 译 / 引用（Alt+Q 聚焦）；普通阅读不会调用 AI。`);
+  status(`${pdf.numPages} 页 · 选择文字后可问 / 译 / 引用（Alt+Q 聚焦）；在正文区域 Ctrl+滚轮缩放 PDF，普通阅读不会调用 AI。`);
   await send({type:'reader-loaded',documentId}).catch(()=>undefined);
   if(pendingReturn?.documentId===documentId){await restorePosition(pendingReturn.position);pendingReturn=undefined;}
   else if(init?.position)await restorePosition(init.position);
@@ -489,6 +497,28 @@ document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='f'){
 function schedulePositionSave(){window.clearTimeout(scrollTimer);scrollTimer=window.setTimeout(()=>{if(documentId)void send({type:'reader-position',documentId,position:position()}).catch(()=>undefined);},250);}
 window.addEventListener('scroll',()=>{hideSelection();updatePageNumber();schedulePositionSave();},{passive:true});
 pagesRoot.addEventListener('scroll',()=>{hideSelection();schedulePositionSave();},{passive:true});
+// Chrome treats Ctrl+wheel (including trackpad pinch) as origin-wide page zoom by default.
+// Intercept only the PDF surface; toolbar, local inputs, navigation and Side Panel retain native behavior.
+pagesRoot.addEventListener('wheel',event=>{
+  if(!event.ctrlKey||!pdf||!event.cancelable||!Number.isFinite(event.deltaY)||event.deltaY===0)return;
+  const target=event.target instanceof Element?event.target:null;
+  if(target?.closest('input,textarea,select,button,[contenteditable]:not([contenteditable="false"]),[role="textbox"]'))return;
+  event.preventDefault();
+  const element=target?.closest('.pdf-page');
+  const page=pages.find(p=>p.element===element)||pages[currentPage-1];
+  if(!page)return;
+  const samePointer=wheelAnchor?.page===page&&wheelAnchor.clientX===event.clientX&&wheelAnchor.clientY===event.clientY;
+  if(!layoutPromise||!samePointer){
+    const box=page.element.getBoundingClientRect();
+    wheelAnchor=box.width>0&&box.height>0?{page,x:(event.clientX-box.left)/box.width,y:(event.clientY-box.top)/box.height,clientX:event.clientX,clientY:event.clientY}:undefined;
+  }
+  const unit=event.deltaMode===WheelEvent.DOM_DELTA_LINE?16:event.deltaMode===WheelEvent.DOM_DELTA_PAGE?pagesRoot.clientHeight||window.innerHeight:1;
+  const delta=Math.max(-500,Math.min(500,event.deltaY*unit));
+  fit=false;
+  const next=scale*Math.exp(-delta*.002),usedAnchor=wheelAnchor;
+  void rescale(next,rotation,usedAnchor).then(applied=>{if(applied&&wheelAnchor===usedAnchor)wheelAnchor=undefined;});
+},{passive:false});
+
 let resizeTimer=0;window.addEventListener('resize',()=>{if(!$('localPanel').hidden)placeLocalPanel();window.clearTimeout(resizeTimer);resizeTimer=window.setTimeout(()=>{if(fit)void rescale(fitScale());},200);});
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{if(sender.id!==chrome.runtime.id||!sender.url?.startsWith(chrome.runtime.getURL('')))return;if(message?.sessionId!==sessionId)return;if(message.type==='reader-navigate'){void navigate(message.anchor).then(()=>respond({ok:true}));return true;}if(message.type==='reader-return'){if(!pdf){pendingReturn={documentId:message.documentId,position:message.position};respond({ok:true});return;}if(message.documentId!==documentId)return;const p=message.position||returnStack.pop();if(p){void restorePosition(p).then(()=>{clearHighlights();status('已返回选段时的阅读位置。');respond({ok:true});});return true;}respond({ok:false});}});
 async function boot(){

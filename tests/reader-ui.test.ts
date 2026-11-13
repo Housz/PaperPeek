@@ -28,6 +28,8 @@ beforeEach(()=>{
   vi.stubGlobal('chrome',{storage:{onChanged:{addListener:(f:Function)=>mocks.storageListeners.push(f)},local:{get:vi.fn(async(key:string|null)=>key?{[key]:mocks.data[key]}:{...mocks.data}),set:vi.fn(async(values:Record<string,unknown>)=>Object.assign(mocks.data,values)),remove:vi.fn(async(keys:string|string[])=>{for(const key of typeof keys==='string'?[keys]:keys)delete mocks.data[key];})}},runtime:{id:'test-extension',getURL:(p:string)=>'chrome-extension://test-extension/'+p,sendMessage:mocks.send,onMessage:{addListener:(f:Function)=>mocks.listeners.push(f)}},tabs:{getCurrent:async()=>({id:12,windowId:1}),create:vi.fn()},sidePanel:{open:mocks.open}});
 });
 function selectFirst(){const span=document.querySelector('.textLayer span')!;const range=document.createRange();range.selectNodeContents(span);window.getSelection()!.removeAllRanges();window.getSelection()!.addRange(range);document.dispatchEvent(new KeyboardEvent('keyup',{key:'Shift'}));}
+// happy-dom's WheelEvent currently omits inherited MouseEvent modifier/coordinate fields.
+function wheel(init:WheelEventInit){const event=new WheelEvent('wheel',init);Object.defineProperties(event,{ctrlKey:{value:init.ctrlKey??false},clientX:{value:init.clientX??0},clientY:{value:init.clientY??0}});return event;}
 describe('Reader UI (PDF canvas and Chrome mocked; not browser acceptance)',()=>{
   it('opens only requested document and provides three physical page surfaces without AI events',async()=>{
     await import('../src/reader');await settle();
@@ -170,6 +172,36 @@ describe('Reader UI (PDF canvas and Chrome mocked; not browser acceptance)',()=>
     expect(first.querySelector('.textLayer')?.textContent).toContain('Evidence on page 1.');
     expect(parseFloat(first.style.width)).toBeCloseTo(760*1.2*1.2);
     expect(byId('fitWidth').textContent).toBe('182%');
+  });
+  it('handles Ctrl+wheel only inside the PDF surface without changing browser zoom styles',async()=>{
+    Object.defineProperty(byId('pages'),'clientWidth',{configurable:true,value:800});
+    await import('../src/reader');await settle();const first=document.querySelector<HTMLElement>('.pdf-page')!,before=parseFloat(first.style.width);
+    const normal=wheel({deltaY:100,bubbles:true,cancelable:true});first.dispatchEvent(normal);await settle();expect(normal.defaultPrevented).toBe(false);expect(parseFloat(first.style.width)).toBe(before);
+    const outside=wheel({deltaY:-100,ctrlKey:true,bubbles:true,cancelable:true});byId('localQuestion').dispatchEvent(outside);expect(outside.defaultPrevented).toBe(false);
+    const input=document.createElement('input');first.append(input);const inInput=wheel({deltaY:-100,ctrlKey:true,bubbles:true,cancelable:true});input.dispatchEvent(inInput);expect(inInput.defaultPrevented).toBe(false);
+    const zoom=wheel({deltaY:-100,ctrlKey:true,bubbles:true,cancelable:true});first.dispatchEvent(zoom);await settle();
+    expect(zoom.defaultPrevented).toBe(true);expect(parseFloat(first.style.width)).toBeCloseTo(before*Math.exp(.2));expect(document.body.style.zoom).toBe('');expect(document.documentElement.style.zoom).toBe('');
+    expect(mocks.generate).not.toHaveBeenCalled();
+  });
+  it('preserves the PDF point under the cursor for Ctrl+wheel zoom',async()=>{
+    Object.defineProperty(byId('pages'),'clientWidth',{configurable:true,value:800});
+    await import('../src/reader');await settle();const first=document.querySelector<HTMLElement>('.pdf-page')!;
+    const oldWidth=parseFloat(first.style.width),oldHeight=parseFloat(first.style.height);
+    first.getBoundingClientRect=()=>new DOMRect(100-byId('pages').scrollLeft,100,parseFloat(first.style.width),parseFloat(first.style.height));
+    const clientX=100+oldWidth*.5,clientY=100+oldHeight*.5;
+    first.dispatchEvent(wheel({deltaY:-100,ctrlKey:true,bubbles:true,cancelable:true,clientX,clientY}));await settle();
+    expect(byId('pages').scrollLeft).toBeCloseTo(oldWidth*.5*(Math.exp(.2)-1));
+    expect(window.scrollTo).toHaveBeenLastCalledWith(0,expect.closeTo(oldHeight*.5*(Math.exp(.2)-1),5));
+  });
+  it('normalizes line and page wheel deltas and clamps repeated pinch zoom',async()=>{
+    Object.defineProperty(byId('pages'),'clientWidth',{configurable:true,value:800});Object.defineProperty(byId('pages'),'clientHeight',{configurable:true,value:400});
+    await import('../src/reader');await settle();const first=document.querySelector<HTMLElement>('.pdf-page')!,initial=parseFloat(first.style.width);
+    first.dispatchEvent(wheel({deltaY:-3,deltaMode:1,ctrlKey:true,bubbles:true,cancelable:true}));await settle();expect(parseFloat(first.style.width)).toBeCloseTo(initial*Math.exp(.096));
+    first.dispatchEvent(wheel({deltaY:3,deltaMode:1,ctrlKey:true,bubbles:true,cancelable:true}));await settle();expect(parseFloat(first.style.width)).toBeCloseTo(initial);
+    first.dispatchEvent(wheel({deltaY:-.25,deltaMode:2,ctrlKey:true,bubbles:true,cancelable:true}));await settle();expect(parseFloat(first.style.width)).toBeCloseTo(initial*Math.exp(.2));
+    for(let i=0;i<10;i++)first.dispatchEvent(wheel({deltaY:-500,ctrlKey:true,bubbles:true,cancelable:true}));await settle();expect(byId('fitWidth').textContent).toBe('350%');expect(first.querySelector('canvas')).not.toBeNull();expect(first.querySelector('.textLayer')).not.toBeNull();
+    for(let i=0;i<10;i++)first.dispatchEvent(wheel({deltaY:500,ctrlKey:true,bubbles:true,cancelable:true}));await settle();expect(byId('fitWidth').textContent).toBe('35%');expect(parseFloat(first.style.width)).toBeCloseTo(210);
+    const key=new KeyboardEvent('keydown',{key:'+',ctrlKey:true,cancelable:true,bubbles:true});document.dispatchEvent(key);expect(key.defaultPrevented).toBe(false);
   });
   it('checkpoints horizontal page-container scrolling without a window scroll',async()=>{
     await import('../src/reader');await settle();

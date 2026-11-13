@@ -86,6 +86,22 @@ try {
   }
   verify('12/12 target page canvases actually rendered and aligned within 160px of viewport top');
   await reader.locator('#pageNumber').fill('1');await reader.locator('#pageNumber').press('Enter');
+  stage='PDF-only Ctrl+wheel zoom';
+  await reader.locator('.pdf-page[data-page="1"] canvas').waitFor();
+  const browserZoomBefore=await worker.evaluate(async urls=>{
+    const tabs=await chrome.tabs.query({});return Promise.all(urls.map(async url=>chrome.tabs.getZoom(tabs.find(t=>t.url===url).id)));
+  },[reader.url(),panel.url()]);
+  const pdfWidthBefore=await reader.locator('.pdf-page[data-page="1"]').evaluate(el=>el.getBoundingClientRect().width);
+  const pdfBox=await reader.locator('.pdf-page[data-page="1"]').boundingBox();
+  await reader.mouse.move(Math.min(1100,pdfBox.x+pdfBox.width/2),Math.max(150,pdfBox.y+180));
+  await reader.keyboard.down('Control');
+  try{await reader.mouse.wheel(0,-100);}finally{await reader.keyboard.up('Control');}
+  await reader.waitForFunction(width=>document.querySelector('.pdf-page[data-page="1"]').getBoundingClientRect().width>width+1,pdfWidthBefore);
+  const browserZoomAfter=await worker.evaluate(async urls=>{
+    const tabs=await chrome.tabs.query({});return Promise.all(urls.map(async url=>chrome.tabs.getZoom(tabs.find(t=>t.url===url).id)));
+  },[reader.url(),panel.url()]);
+  assert.deepEqual(browserZoomAfter,browserZoomBefore,'Ctrl+wheel changed Reader/Side Panel browser zoom');
+  verify('Trusted Ctrl+wheel changes PDF width without changing Reader or panel browser zoom');
   await reader.locator('#zoomIn').click();await reader.locator('.more summary').click();await reader.locator('#rotate').click();await reader.locator('.more summary').click();
   await reader.waitForFunction(()=>document.querySelector('.pdf-page[data-page="1"] canvas'));
   const before=await reader.evaluate(()=>({x:document.querySelector('#pages').scrollLeft,y:scrollY,width:document.querySelector('.pdf-page').getBoundingClientRect().width,height:document.querySelector('.pdf-page').getBoundingClientRect().height,zoom:document.querySelector('#fitWidth').textContent}));

@@ -156,3 +156,9 @@ Maintainers: this blocked release is a delivery/environment issue; don't fabrica
 
 The main Side Panel now hides the entire Reader-entry row (including open-mode menu) while the visible tab is PaperPeek Reader. It shows the entry on a usable native/source page, and hides it in Settings, on empty pages and on expired Reader pages. Detection uses the actual visible tab URL, not the shared workspace source URL or a tab ID that can also represent same-tab Back/Forward. View-only controls refresh even when the source and Reader share an unchanged workspace. Added regression coverage for source/Reader switching, same-tab Back/Forward, Side Panel reopening, settings and empty/expired pages.
 Verification for this follow-up: TypeScript, all 148 tests across 20 files, production build, diff whitespace check and browser-harness syntax passed. Native Chrome execution remains blocked as documented above.
+
+### PDF-only Ctrl+wheel zoom follow-up
+
+Previously there was no Reader wheel interception, so Ctrl+wheel could invoke browser page zoom rather than PDF rendering scale. Chrome documents automatic zoom as normally origin-scoped; Reader and panel share an extension origin. The reported panel coupling is consistent with that mechanism, but was not independently reproduced in real Chrome here. The new non-passive listener is scoped to PDF content, cancels cancellable Ctrl+wheel (including trackpad-style events), normalizes delta modes, clamps PDF scale and preserves the cursor's document point. Ordinary scrolling, form controls and keyboard/browser zoom remain unchanged; existing browser zoom is not automatically reset.
+
+TypeScript, all 151 tests across 20 files, production build and diff checks passed. The browser harness now includes trusted Ctrl+wheel and Reader/panel browser-zoom comparisons, but that runtime remains unexecuted due to the documented launch restriction.

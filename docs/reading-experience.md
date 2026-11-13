@@ -33,3 +33,9 @@ The main AI header shows the provider mark plus configured model ID, with a full
 Automated tests use deterministic Chrome/PDF/model mocks. The Playwright script exercises the built MV3 package with synthetic network if a permitted Chromium environment is available. It does not test a live provider or replace real native Side Panel usability checks. See `verification.md` for executed status. No release is authorized by this issue.
 
 Concurrent editing: saved discussions use per-document Web Locks and optimistic revisions. If another Reader edits or deletes the same discussion, a stale write is rejected with a copy/reopen message rather than silently overwriting the other window. Closing a request before completion leaves its submitted question available for retry on reopening.
+
+### Reader entry and zoom boundaries
+
+The Side Panel's Reader-entry button and open-mode menu are hidden when the actual active page is already PaperPeek Reader (also in Settings or without a usable paper). Returning to the native/source page restores the entry, including same-tab Back/Forward.
+
+PDF-area Ctrl+wheel is intended as document zoom, distinct from browser page zoom. Chrome's automatic browser zoom is normally origin-scoped ([official zoom-scope reference](https://developer.chrome.com/docs/extensions/reference/api/tabs#type-ZoomSettingsScope)); Reader and Side Panel use the same extension origin. The Reader handles cancellable Ctrl+wheel events only in the PDF region to update PDF rendering scale and preserve the pointer anchor, including trackpad pinch events emitted as Ctrl+wheel. Ordinary scrolling and browser-level keyboard zoom remain available. Existing browser zoom is not forcibly reset, preserving accessibility preferences.
